@@ -7,30 +7,33 @@ import { useAddConnectedAccount, Platform } from "@/hooks/useConnectedAccounts";
 import { Loader2, ExternalLink, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
 const platformConfig = {
   youtube: {
     name: "YouTube",
     icon: "bg-youtube",
-    oauthUrl: "https://accounts.google.com/o/oauth2/auth",
+    hasOAuth: false,
     instructions: "Enter your YouTube channel username and ID to connect your account.",
   },
   tiktok: {
     name: "TikTok",
     icon: "bg-tiktok",
-    oauthUrl: "https://www.tiktok.com/auth/authorize",
-    instructions: "Enter your TikTok username and user ID to connect your account.",
+    hasOAuth: true,
+    instructions: "Connect your TikTok account using OAuth for automatic posting.",
   },
   instagram: {
     name: "Instagram",
     icon: "bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400",
-    oauthUrl: "https://api.instagram.com/oauth/authorize",
+    hasOAuth: false,
     instructions: "Enter your Instagram username and account ID to connect your account.",
   },
   twitch: {
     name: "Twitch",
     icon: "bg-twitch",
-    oauthUrl: "https://id.twitch.tv/oauth2/authorize",
+    hasOAuth: false,
     instructions: "Enter your Twitch username and user ID to connect your account.",
   },
 };
@@ -45,7 +48,9 @@ export function ConnectAccountDialog({ open, onOpenChange, platform }: ConnectAc
   const [username, setUsername] = useState("");
   const [userId, setUserId] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
+  const [isConnecting, setIsConnecting] = useState(false);
   const addAccount = useAddConnectedAccount();
+  const { user } = useAuth();
 
   if (!platform) return null;
 
@@ -68,10 +73,39 @@ export function ConnectAccountDialog({ open, onOpenChange, platform }: ConnectAc
     onOpenChange(false);
   };
 
-  const handleOAuthConnect = () => {
-    // For now, show an alert that OAuth requires API keys
-    // In production, this would redirect to the OAuth flow
-    window.open(config.oauthUrl, "_blank", "width=600,height=700");
+  const handleOAuthConnect = async () => {
+    if (!user) {
+      toast.error("Please log in to connect your account");
+      return;
+    }
+
+    if (platform === "tiktok") {
+      setIsConnecting(true);
+      try {
+        const { data, error } = await supabase.functions.invoke("tiktok-oauth", {
+          body: { userId: user.id },
+        });
+
+        if (error) {
+          console.error("OAuth error:", error);
+          toast.error("Failed to start OAuth flow");
+          return;
+        }
+
+        if (data?.authUrl) {
+          // Redirect to TikTok authorization
+          window.location.href = data.authUrl;
+        }
+      } catch (err) {
+        console.error("OAuth error:", err);
+        toast.error("Failed to connect to TikTok");
+      } finally {
+        setIsConnecting(false);
+      }
+    } else {
+      // For platforms without OAuth, show a message
+      toast.info(`OAuth for ${config.name} coming soon! Use manual entry for now.`);
+    }
   };
 
   return (
@@ -108,12 +142,43 @@ export function ConnectAccountDialog({ open, onOpenChange, platform }: ConnectAc
           </DialogDescription>
         </DialogHeader>
 
-        <Alert className="bg-muted/50">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription className="text-sm">
-            Full OAuth integration requires API credentials. For now, you can manually add your account details below, or use the OAuth button to start the authorization process.
-          </AlertDescription>
-        </Alert>
+        {config.hasOAuth ? (
+          <Alert className="bg-primary/10 border-primary/20">
+            <AlertCircle className="h-4 w-4 text-primary" />
+            <AlertDescription className="text-sm">
+              Click "Connect with OAuth" to securely authorize your {config.name} account.
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <Alert className="bg-muted/50">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription className="text-sm">
+              OAuth for {config.name} coming soon. For now, manually add your account details below.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {config.hasOAuth ? (
+          <div className="pt-4">
+            <Button
+              type="button"
+              variant="gradient"
+              className="w-full gap-2"
+              onClick={handleOAuthConnect}
+              disabled={isConnecting}
+            >
+              {isConnecting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ExternalLink className="h-4 w-4" />
+              )}
+              Connect with OAuth
+            </Button>
+            <p className="text-xs text-muted-foreground text-center mt-3">
+              Or add manually below
+            </p>
+          </div>
+        ) : null}
 
         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
           <div className="space-y-2">
@@ -148,20 +213,11 @@ export function ConnectAccountDialog({ open, onOpenChange, platform }: ConnectAc
             />
           </div>
 
-          <div className="flex gap-3 pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              className="flex-1 gap-2"
-              onClick={handleOAuthConnect}
-            >
-              <ExternalLink className="h-4 w-4" />
-              OAuth Connect
-            </Button>
+          <div className="pt-4">
             <Button
               type="submit"
-              variant="gradient"
-              className="flex-1"
+              variant={config.hasOAuth ? "outline" : "gradient"}
+              className="w-full"
               disabled={addAccount.isPending}
             >
               {addAccount.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
