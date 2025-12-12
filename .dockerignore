@@ -1,0 +1,9 @@
+node_modules
+npm-debug.log
+temp
+.git
+.env
+.env.local
+*.md
+!README.md
+

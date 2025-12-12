@@ -10,13 +10,14 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { oauthApi } from "@/services/api";
 
-const platformConfig = {
+  const platformConfig = {
   youtube: {
     name: "YouTube",
     icon: "bg-youtube",
-    hasOAuth: false,
-    instructions: "Enter your YouTube channel username and ID to connect your account.",
+    hasOAuth: true,
+    instructions: "Connect your YouTube account using OAuth for automatic posting.",
   },
   tiktok: {
     name: "TikTok",
@@ -27,8 +28,8 @@ const platformConfig = {
   instagram: {
     name: "Instagram",
     icon: "bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400",
-    hasOAuth: false,
-    instructions: "Enter your Instagram username and account ID to connect your account.",
+    hasOAuth: true,
+    instructions: "Connect your Instagram account using OAuth for automatic posting.",
   },
   twitch: {
     name: "Twitch",
@@ -79,32 +80,32 @@ export function ConnectAccountDialog({ open, onOpenChange, platform }: ConnectAc
       return;
     }
 
-    if (platform === "tiktok") {
-      setIsConnecting(true);
-      try {
-        const { data, error } = await supabase.functions.invoke("tiktok-oauth", {
-          body: { userId: user.id },
-        });
+    if (!config.hasOAuth) {
+      toast.info(`OAuth for ${config.name} is not available. Use manual entry.`);
+      return;
+    }
 
-        if (error) {
-          console.error("OAuth error:", error);
-          toast.error("Failed to start OAuth flow");
-          return;
-        }
+    setIsConnecting(true);
+    try {
+      let authUrl: string;
 
-        if (data?.authUrl) {
-          // Redirect to TikTok authorization
-          window.location.href = data.authUrl;
-        }
-      } catch (err) {
-        console.error("OAuth error:", err);
-        toast.error("Failed to connect to TikTok");
-      } finally {
-        setIsConnecting(false);
+      if (platform === "tiktok") {
+        authUrl = await oauthApi.getTikTokAuthUrl(user.id);
+      } else if (platform === "youtube") {
+        authUrl = await oauthApi.getYouTubeAuthUrl(user.id);
+      } else if (platform === "instagram") {
+        authUrl = await oauthApi.getInstagramAuthUrl(user.id);
+      } else {
+        toast.error("OAuth not supported for this platform");
+        return;
       }
-    } else {
-      // For platforms without OAuth, show a message
-      toast.info(`OAuth for ${config.name} coming soon! Use manual entry for now.`);
+
+      // Redirect to platform authorization
+      window.location.href = authUrl;
+    } catch (err) {
+      console.error("OAuth error:", err);
+      toast.error(`Failed to connect to ${config.name}: ${err instanceof Error ? err.message : "Unknown error"}`);
+      setIsConnecting(false);
     }
   };
 

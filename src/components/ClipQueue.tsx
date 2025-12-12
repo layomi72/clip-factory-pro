@@ -1,51 +1,30 @@
-import { Clock, CheckCircle2, Loader2, Play } from "lucide-react";
+import { Clock, CheckCircle2, Loader2, Play, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { formatDistanceToNow } from "date-fns";
 
-interface Clip {
+interface ProcessingJob {
   id: string;
-  title: string;
-  duration: string;
-  thumbnail: string;
-  status: "processing" | "ready" | "distributed";
-  platforms: number;
+  source_video_url: string;
+  clip_start_time: number;
+  clip_end_time: number;
+  status: "pending" | "processing" | "completed" | "failed";
+  output_url: string | null;
+  error_message: string | null;
+  created_at: string;
+  completed_at: string | null;
 }
 
-const clips: Clip[] = [
-  {
-    id: "1",
-    title: "Epic Gaming Moment #47",
-    duration: "0:58",
-    thumbnail: "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=200&h=120&fit=crop",
-    status: "distributed",
-    platforms: 120,
-  },
-  {
-    id: "2",
-    title: "Funny Reaction Compilation",
-    duration: "1:24",
-    thumbnail: "https://images.unsplash.com/photo-1493711662062-fa541f7f3d24?w=200&h=120&fit=crop",
-    status: "ready",
-    platforms: 0,
-  },
-  {
-    id: "3",
-    title: "Tutorial Highlight - Part 3",
-    duration: "2:15",
-    thumbnail: "https://images.unsplash.com/photo-1560419015-7c427e8ae5ba?w=200&h=120&fit=crop",
-    status: "processing",
-    platforms: 0,
-  },
-  {
-    id: "4",
-    title: "Best Plays This Week",
-    duration: "1:45",
-    thumbnail: "https://images.unsplash.com/photo-1511512578047-dfb367046420?w=200&h=120&fit=crop",
-    status: "ready",
-    platforms: 0,
-  },
-];
-
 const statusConfig = {
+  pending: {
+    icon: Clock,
+    label: "Pending",
+    color: "text-blue-400",
+    bg: "bg-blue-400/10",
+    animate: "",
+  },
   processing: {
     icon: Loader2,
     label: "Processing",
@@ -53,23 +32,55 @@ const statusConfig = {
     bg: "bg-yellow-400/10",
     animate: "animate-spin",
   },
-  ready: {
-    icon: Play,
-    label: "Ready",
-    color: "text-primary",
-    bg: "bg-primary/10",
-    animate: "",
-  },
-  distributed: {
+  completed: {
     icon: CheckCircle2,
-    label: "Distributed",
+    label: "Completed",
     color: "text-green-400",
     bg: "bg-green-400/10",
     animate: "",
   },
+  failed: {
+    icon: AlertCircle,
+    label: "Failed",
+    color: "text-red-400",
+    bg: "bg-red-400/10",
+    animate: "",
+  },
+};
+
+const formatDuration = (seconds: number) => {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
 };
 
 export function ClipQueue() {
+  const { user } = useAuth();
+
+  const { data: jobs = [], isLoading } = useQuery({
+    queryKey: ["processing-jobs", user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      
+      const { data, error } = await supabase
+        .from("processing_jobs")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+      return data as ProcessingJob[];
+    },
+    enabled: !!user,
+    refetchInterval: 5000, // Refetch every 5 seconds to get status updates
+  });
+
+  const formatClipDuration = (job: ProcessingJob) => {
+    const duration = job.clip_end_time - job.clip_start_time;
+    return formatDuration(duration);
+  };
+
   return (
     <div className="rounded-xl bg-card border border-border p-6 animate-slide-up">
       <div className="flex items-center justify-between mb-6">
@@ -79,63 +90,79 @@ export function ClipQueue() {
           </div>
           <div>
             <h2 className="text-lg font-semibold text-foreground">Clip Queue</h2>
-            <p className="text-sm text-muted-foreground">{clips.length} clips in queue</p>
+            <p className="text-sm text-muted-foreground">
+              {isLoading ? "Loading..." : `${jobs.length} clips in queue`}
+            </p>
           </div>
         </div>
-        <button className="text-sm font-medium text-primary hover:underline">View All</button>
       </div>
 
-      <div className="space-y-3">
-        {clips.map((clip) => {
-          const status = statusConfig[clip.status];
-          const StatusIcon = status.icon;
+      {isLoading ? (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : jobs.length === 0 ? (
+        <div className="text-center py-8">
+          <Clock className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+          <h3 className="text-lg font-medium mb-2">No clips in queue</h3>
+          <p className="text-muted-foreground text-sm">
+            Process clips from imported streams to see them here
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {jobs.map((job) => {
+            const status = statusConfig[job.status];
+            const StatusIcon = status.icon;
 
-          return (
-            <div
-              key={clip.id}
-              className="group flex items-center gap-4 rounded-lg bg-secondary/30 p-3 transition-all hover:bg-secondary/50 cursor-pointer"
-            >
-              <div className="relative h-16 w-28 flex-shrink-0 overflow-hidden rounded-lg">
-                <img
-                  src={clip.thumbnail}
-                  alt={clip.title}
-                  className="h-full w-full object-cover transition-transform group-hover:scale-105"
-                />
-                <div className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 text-xs font-medium text-white">
-                  {clip.duration}
+            return (
+              <div
+                key={job.id}
+                className="group flex items-center gap-4 rounded-lg bg-secondary/30 p-3 transition-all hover:bg-secondary/50"
+              >
+                <div className="relative h-16 w-28 flex-shrink-0 overflow-hidden rounded-lg bg-muted flex items-center justify-center">
+                  <Play className="h-6 w-6 text-muted-foreground" />
+                  <div className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 text-xs font-medium text-white">
+                    {formatClipDuration(job)}
+                  </div>
                 </div>
-              </div>
 
-              <div className="flex-1 min-w-0">
-                <h3 className="font-medium text-foreground truncate">{clip.title}</h3>
-                <div className="mt-1 flex items-center gap-2">
-                  <span
-                    className={cn(
-                      "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
-                      status.bg,
-                      status.color
-                    )}
-                  >
-                    <StatusIcon className={cn("h-3 w-3", status.animate)} />
-                    {status.label}
-                  </span>
-                  {clip.platforms > 0 && (
-                    <span className="text-xs text-muted-foreground">
-                      Posted to {clip.platforms} pages
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-medium text-foreground truncate text-sm">
+                    Clip from {new URL(job.source_video_url).hostname}
+                  </h3>
+                  <div className="mt-1 flex items-center gap-2 flex-wrap">
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
+                        status.bg,
+                        status.color
+                      )}
+                    >
+                      <StatusIcon className={cn("h-3 w-3", status.animate)} />
+                      {status.label}
                     </span>
-                  )}
+                    <span className="text-xs text-muted-foreground">
+                      {formatDistanceToNow(new Date(job.created_at), { addSuffix: true })}
+                    </span>
+                    {job.error_message && (
+                      <span className="text-xs text-red-400 truncate max-w-[200px]">
+                        {job.error_message}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              {clip.status === "ready" && (
-                <button className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground opacity-0 transition-opacity group-hover:opacity-100">
-                  Distribute
-                </button>
-              )}
-            </div>
-          );
-        })}
-      </div>
+                {job.status === "completed" && job.output_url && (
+                  <button className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground opacity-0 transition-opacity group-hover:opacity-100">
+                    Use Clip
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { Calendar as CalendarIcon, Clock, Link, MessageSquare } from "lucide-react";
 import {
@@ -32,14 +32,30 @@ import { cn } from "@/lib/utils";
 interface SchedulePostDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  defaultClipUrl?: string;
+  defaultStartTime?: number;
+  defaultEndTime?: number;
 }
 
-export function SchedulePostDialog({ open, onOpenChange }: SchedulePostDialogProps) {
-  const [clipUrl, setClipUrl] = useState("");
+export function SchedulePostDialog({ 
+  open, 
+  onOpenChange, 
+  defaultClipUrl,
+  defaultStartTime,
+  defaultEndTime 
+}: SchedulePostDialogProps) {
+  const [clipUrl, setClipUrl] = useState(defaultClipUrl || "");
   const [caption, setCaption] = useState("");
   const [selectedAccountId, setSelectedAccountId] = useState("");
   const [date, setDate] = useState<Date>();
   const [time, setTime] = useState("12:00");
+
+  // Update clipUrl when defaultClipUrl changes
+  useEffect(() => {
+    if (defaultClipUrl) {
+      setClipUrl(defaultClipUrl);
+    }
+  }, [defaultClipUrl]);
 
   const { data: accounts = [] } = useConnectedAccounts();
   const addScheduledPost = useAddScheduledPost();

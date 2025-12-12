@@ -8,7 +8,8 @@ import {
   Volume2, 
   VolumeX,
   RotateCcw,
-  Calendar
+  Calendar,
+  Loader2
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,12 +18,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { processingApi } from "@/services/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface ClipEditorProps {
-  onSchedule?: (clipData: { url: string; startTime: number; endTime: number }) => void;
+  onSchedule?: (clipData: { url: string; startTime: number; endTime: number; clipId?: string }) => void;
+  sourceStreamId?: string; // Optional: ID of imported stream
 }
 
-export function ClipEditor({ onSchedule }: ClipEditorProps) {
+export function ClipEditor({ onSchedule, sourceStreamId }: ClipEditorProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [videoUrl, setVideoUrl] = useState("");
   const [isLoaded, setIsLoaded] = useState(false);
@@ -33,6 +39,12 @@ export function ClipEditor({ onSchedule }: ClipEditorProps) {
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0);
   const [volume, setVolume] = useState(1);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processedClipUrl, setProcessedClipUrl] = useState<string | null>(null);
+
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -150,13 +162,66 @@ export function ClipEditor({ onSchedule }: ClipEditorProps) {
     seekTo(Math.min(trimEnd, currentTime + 5));
   };
 
-  const handleScheduleClick = () => {
-    if (onSchedule && videoUrl) {
-      onSchedule({
-        url: videoUrl,
-        startTime: trimStart,
-        endTime: trimEnd,
+  const handleScheduleClick = async () => {
+    if (!videoUrl || !user) {
+      toast({
+        title: "Error",
+        description: "Please load a video first",
+        variant: "destructive",
       });
+      return;
+    }
+
+    if (trimEnd <= trimStart) {
+      toast({
+        title: "Invalid clip",
+        description: "End time must be greater than start time",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      // Generate clip ID
+      const clipId = `clip-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Call process-clip API
+      const result = await processingApi.processClip(
+        videoUrl,
+        trimStart,
+        trimEnd,
+        user.id,
+        clipId
+      );
+
+      setProcessedClipUrl(result.clipUrl);
+      
+      // Invalidate processing jobs query to refresh status
+      queryClient.invalidateQueries({ queryKey: ["processing-jobs"] });
+
+      toast({
+        title: "Clip processed",
+        description: result.message || "Your clip is being processed",
+      });
+
+      // Call onSchedule callback with processed clip URL
+      if (onSchedule) {
+        onSchedule({
+          url: result.clipUrl,
+          startTime: trimStart,
+          endTime: trimEnd,
+          clipId: result.clipId,
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Processing failed",
+        description: error instanceof Error ? error.message : "Failed to process clip",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -409,16 +474,41 @@ export function ClipEditor({ onSchedule }: ClipEditorProps) {
         </Card>
       )}
 
-      {/* Schedule Button */}
+      {/* Process & Schedule Button */}
       {isLoaded && onSchedule && (
         <Button 
           size="lg" 
           className="w-full"
           onClick={handleScheduleClick}
+          disabled={isProcessing || trimEnd <= trimStart}
         >
-          <Calendar className="h-5 w-5 mr-2" />
-          Schedule This Clip
+          {isProcessing ? (
+            <>
+              <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+              Processing Clip...
+            </>
+          ) : (
+            <>
+              <Calendar className="h-5 w-5 mr-2" />
+              Process & Schedule Clip
+            </>
+          )}
         </Button>
+      )}
+
+      {processedClipUrl && (
+        <Card className="bg-green-500/10 border-green-500/20">
+          <CardContent className="pt-4">
+            <p className="text-sm text-green-600 dark:text-green-400">
+              ✓ Clip processed successfully! You can now schedule it for posting.
+            </p>
+            {processedClipUrl.startsWith("pending:") && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Processing in queue. Check status in Clip Queue.
+              </p>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* Keyboard Shortcuts */}

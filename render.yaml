@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: ffmpeg-analysis-service
+    env: node
+    buildCommand: npm install
+    startCommand: node scripts/ffmpeg-analysis-service.js
+    envVars:
+      - key: PORT
+        value: 10000
+    healthCheckPath: /health
+
