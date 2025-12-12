@@ -7,8 +7,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
-import Terms from "./pages/Terms";
-import Privacy from "./pages/Privacy";
+import TikTokVerification from "./pages/TikTokVerification";
 
 const queryClient = new QueryClient();
 
@@ -22,8 +21,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
-            <Route path="/terms.html" element={<Terms />} />
-            <Route path="/privacy.html" element={<Privacy />} />
+            <Route path="/tiktokaBemzEm9f1y23n4ldc4LNvwd1k6yMkyc.txt" element={<TikTokVerification />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
