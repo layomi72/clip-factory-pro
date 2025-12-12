@@ -35,7 +35,9 @@ async function processClip(
   userId: string,
   clipId: string
 ): Promise<{ clipUrl: string; duration: number }> {
-  const processingServiceUrl = Deno.env.get("FFMPEG_SERVICE_URL");
+  // Check for FFmpeg service URL (try both env var names)
+  const processingServiceUrl = Deno.env.get("FFMPEG_SERVICE_URL") || 
+                                Deno.env.get("FFMPEG_ANALYSIS_SERVICE_URL");
   
   if (processingServiceUrl) {
     // Call external FFmpeg processing service
