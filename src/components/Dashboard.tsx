@@ -1,9 +1,11 @@
-import { Video, Scissors, Users, TrendingUp, Eye, UserPlus } from "lucide-react";
+import { useState } from "react";
+import { Video, Scissors, Users, TrendingUp, Eye, UserPlus, ArrowUp, ArrowDown } from "lucide-react";
 import { StatsCard } from "./StatsCard";
 import { PlatformCard } from "./PlatformCard";
 import { StreamImporter } from "./StreamImporter";
 import { ClipQueue } from "./ClipQueue";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useConnectedAccounts } from "@/hooks/useConnectedAccounts";
 
 // Platform icons as simple components
@@ -39,6 +41,15 @@ const platformStats: Record<string, { followers: number; views: number }> = {
   twitch: { followers: 23000, views: 340000 },
 };
 
+// Time period multipliers for simulated data
+const periodMultipliers: Record<string, { views: number; followers: number; label: string; changeLabel: string }> = {
+  today: { views: 0.003, followers: 0.0005, label: "Today", changeLabel: "vs yesterday" },
+  week: { views: 0.02, followers: 0.003, label: "This Week", changeLabel: "vs last week" },
+  month: { views: 0.08, followers: 0.012, label: "This Month", changeLabel: "vs last month" },
+  year: { views: 1, followers: 0.15, label: "This Year", changeLabel: "vs last year" },
+  allTime: { views: 1, followers: 1, label: "All Time", changeLabel: "total" },
+};
+
 const formatNumber = (num: number) => {
   if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
   if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
@@ -46,6 +57,7 @@ const formatNumber = (num: number) => {
 };
 
 export function Dashboard() {
+  const [timePeriod, setTimePeriod] = useState<string>("month");
   const { data: accounts = [] } = useConnectedAccounts();
 
   // Calculate combined stats from connected accounts
@@ -55,23 +67,44 @@ export function Dashboard() {
   }, {} as Record<string, number>);
 
   // Calculate total followers and views across all platforms
-  let totalFollowers = 0;
-  let totalViews = 0;
+  let baseTotalFollowers = 0;
+  let baseTotalViews = 0;
 
   Object.entries(accountsByPlatform).forEach(([platform, count]) => {
     const stats = platformStats[platform];
     if (stats) {
-      // Multiply by account count for realistic simulation
-      totalFollowers += stats.followers * count;
-      totalViews += stats.views * count;
+      baseTotalFollowers += stats.followers * count;
+      baseTotalViews += stats.views * count;
     }
   });
 
   // If no accounts, show demo data
   if (accounts.length === 0) {
-    totalFollowers = 304000;
-    totalViews = 5490000;
+    baseTotalFollowers = 304000;
+    baseTotalViews = 5490000;
   }
+
+  // Apply time period multiplier
+  const period = periodMultipliers[timePeriod];
+  const totalViews = Math.round(baseTotalViews * period.views);
+  const totalFollowers = timePeriod === "allTime" 
+    ? baseTotalFollowers 
+    : Math.round(baseTotalFollowers * period.followers);
+
+  // Generate random but consistent change percentages based on period
+  const getChange = (seed: number) => {
+    const changes: Record<string, number> = {
+      today: 5 + (seed % 10),
+      week: 8 + (seed % 15),
+      month: 15 + (seed % 20),
+      year: 45 + (seed % 30),
+      allTime: 0,
+    };
+    return changes[timePeriod];
+  };
+
+  const viewsChange = getChange(7);
+  const followersChange = getChange(3);
 
   return (
     <div className="space-y-8">
@@ -85,8 +118,20 @@ export function Dashboard() {
 
       {/* Combined Stats Overview */}
       <Card className="bg-gradient-to-br from-primary/10 via-background to-accent/10 border-primary/20">
-        <CardHeader>
-          <CardTitle className="text-lg">Combined Account Stats</CardTitle>
+        <CardHeader className="pb-2">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <CardTitle className="text-lg">Combined Account Stats</CardTitle>
+            <Tabs value={timePeriod} onValueChange={setTimePeriod}>
+              <TabsList className="h-9">
+                <TabsTrigger value="today" className="text-xs px-3">Today</TabsTrigger>
+                <TabsTrigger value="week" className="text-xs px-3">Week</TabsTrigger>
+                <TabsTrigger value="month" className="text-xs px-3">Month</TabsTrigger>
+                <TabsTrigger value="year" className="text-xs px-3">Year</TabsTrigger>
+                <TabsTrigger value="allTime" className="text-xs px-3">All Time</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+          <p className="text-sm text-muted-foreground">{period.label} statistics</p>
         </CardHeader>
         <CardContent>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
@@ -96,7 +141,15 @@ export function Dashboard() {
               </div>
               <div>
                 <p className="text-2xl font-bold">{formatNumber(totalViews)}</p>
-                <p className="text-sm text-muted-foreground">Total Views</p>
+                <div className="flex items-center gap-1">
+                  <p className="text-sm text-muted-foreground">Total Views</p>
+                  {timePeriod !== "allTime" && (
+                    <span className="flex items-center text-xs text-green-500">
+                      <ArrowUp className="h-3 w-3" />
+                      {viewsChange}%
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-4">
@@ -105,7 +158,17 @@ export function Dashboard() {
               </div>
               <div>
                 <p className="text-2xl font-bold">{formatNumber(totalFollowers)}</p>
-                <p className="text-sm text-muted-foreground">Total Followers</p>
+                <div className="flex items-center gap-1">
+                  <p className="text-sm text-muted-foreground">
+                    {timePeriod === "allTime" ? "Total Followers" : "New Followers"}
+                  </p>
+                  {timePeriod !== "allTime" && (
+                    <span className="flex items-center text-xs text-green-500">
+                      <ArrowUp className="h-3 w-3" />
+                      {followersChange}%
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-4">
@@ -125,13 +188,20 @@ export function Dashboard() {
                 <p className="text-2xl font-bold">
                   {accounts.length > 0 
                     ? formatNumber(Math.round(totalViews / (accounts.length || 1)))
-                    : "45.8K"
+                    : formatNumber(Math.round(totalViews / 120))
                   }
                 </p>
                 <p className="text-sm text-muted-foreground">Avg Views/Account</p>
               </div>
             </div>
           </div>
+
+          {/* Period comparison note */}
+          {timePeriod !== "allTime" && (
+            <p className="text-xs text-muted-foreground mt-4 text-center">
+              Compared to {period.changeLabel}
+            </p>
+          )}
 
           {/* Platform breakdown */}
           {accounts.length > 0 && (
