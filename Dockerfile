@@ -10,7 +10,8 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 # Install yt-dlp (for video downloading in analysis)
-RUN pip3 install yt-dlp
+# Using --break-system-packages flag for Docker environment
+RUN pip3 install --break-system-packages yt-dlp
 
 WORKDIR /app
 
