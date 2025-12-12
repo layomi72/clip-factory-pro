@@ -1,8 +1,10 @@
-import { Video, Scissors, Users, TrendingUp } from "lucide-react";
+import { Video, Scissors, Users, TrendingUp, Eye, UserPlus } from "lucide-react";
 import { StatsCard } from "./StatsCard";
 import { PlatformCard } from "./PlatformCard";
 import { StreamImporter } from "./StreamImporter";
 import { ClipQueue } from "./ClipQueue";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useConnectedAccounts } from "@/hooks/useConnectedAccounts";
 
 // Platform icons as simple components
 const YouTubeIcon = () => (
@@ -29,16 +31,140 @@ const InstagramIcon = () => (
   </svg>
 );
 
+// Mock stats for each platform - in production these would come from API
+const platformStats: Record<string, { followers: number; views: number }> = {
+  youtube: { followers: 125000, views: 2400000 },
+  tiktok: { followers: 89000, views: 1800000 },
+  instagram: { followers: 67000, views: 950000 },
+  twitch: { followers: 23000, views: 340000 },
+};
+
+const formatNumber = (num: number) => {
+  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+  return num.toString();
+};
+
 export function Dashboard() {
+  const { data: accounts = [] } = useConnectedAccounts();
+
+  // Calculate combined stats from connected accounts
+  const accountsByPlatform = accounts.reduce((acc, account) => {
+    acc[account.platform] = (acc[account.platform] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  // Calculate total followers and views across all platforms
+  let totalFollowers = 0;
+  let totalViews = 0;
+
+  Object.entries(accountsByPlatform).forEach(([platform, count]) => {
+    const stats = platformStats[platform];
+    if (stats) {
+      // Multiply by account count for realistic simulation
+      totalFollowers += stats.followers * count;
+      totalViews += stats.views * count;
+    }
+  });
+
+  // If no accounts, show demo data
+  if (accounts.length === 0) {
+    totalFollowers = 304000;
+    totalViews = 5490000;
+  }
+
   return (
     <div className="space-y-8">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
         <p className="mt-1 text-muted-foreground">
-          Manage your streams and distribute clips across 120 pages
+          Manage your streams and distribute clips across {accounts.length || 120} pages
         </p>
       </div>
+
+      {/* Combined Stats Overview */}
+      <Card className="bg-gradient-to-br from-primary/10 via-background to-accent/10 border-primary/20">
+        <CardHeader>
+          <CardTitle className="text-lg">Combined Account Stats</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+                <Eye className="h-6 w-6 text-primary" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{formatNumber(totalViews)}</p>
+                <p className="text-sm text-muted-foreground">Total Views</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-green-500/10">
+                <UserPlus className="h-6 w-6 text-green-500" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{formatNumber(totalFollowers)}</p>
+                <p className="text-sm text-muted-foreground">Total Followers</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-500/10">
+                <Users className="h-6 w-6 text-blue-500" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{accounts.length || 120}</p>
+                <p className="text-sm text-muted-foreground">Connected Accounts</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-purple-500/10">
+                <TrendingUp className="h-6 w-6 text-purple-500" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">
+                  {accounts.length > 0 
+                    ? formatNumber(Math.round(totalViews / (accounts.length || 1)))
+                    : "45.8K"
+                  }
+                </p>
+                <p className="text-sm text-muted-foreground">Avg Views/Account</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Platform breakdown */}
+          {accounts.length > 0 && (
+            <div className="mt-6 pt-6 border-t border-border">
+              <p className="text-sm font-medium mb-3">Breakdown by Platform</p>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {Object.entries(accountsByPlatform).map(([platform, count]) => {
+                  const stats = platformStats[platform];
+                  return (
+                    <div 
+                      key={platform}
+                      className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50"
+                    >
+                      <span className="text-xl">
+                        {platform === "youtube" && "🎬"}
+                        {platform === "tiktok" && "🎵"}
+                        {platform === "instagram" && "📸"}
+                        {platform === "twitch" && "🎮"}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium capitalize text-sm">{platform}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {count} account{count !== 1 ? "s" : ""} • {formatNumber((stats?.followers || 0) * count)} followers
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Stats */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -58,14 +184,14 @@ export function Dashboard() {
         />
         <StatsCard
           title="Connected Accounts"
-          value="120"
+          value={accounts.length > 0 ? accounts.length.toString() : "120"}
           change="3 new"
           trend="up"
           icon={Users}
         />
         <StatsCard
           title="Total Reach"
-          value="2.4M"
+          value={formatNumber(totalViews)}
           change="24% this month"
           trend="up"
           icon={TrendingUp}
@@ -82,28 +208,28 @@ export function Dashboard() {
           <PlatformCard
             name="YouTube"
             icon={<YouTubeIcon />}
-            accounts={40}
+            accounts={accountsByPlatform.youtube || 40}
             clips={623}
             platform="youtube"
           />
           <PlatformCard
             name="TikTok"
             icon={<TikTokIcon />}
-            accounts={40}
+            accounts={accountsByPlatform.tiktok || 40}
             clips={512}
             platform="tiktok"
           />
           <PlatformCard
             name="Instagram"
             icon={<InstagramIcon />}
-            accounts={40}
+            accounts={accountsByPlatform.instagram || 40}
             clips={489}
             platform="instagram"
           />
           <PlatformCard
             name="Twitch"
             icon={<TwitchIcon />}
-            accounts={0}
+            accounts={accountsByPlatform.twitch || 0}
             clips={0}
             platform="twitch"
           />
