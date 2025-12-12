@@ -4,6 +4,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { Dashboard } from "@/components/Dashboard";
 import { AccountsManager } from "@/components/AccountsManager";
 import { ScheduleManager } from "@/components/ScheduleManager";
+import { ClipEditor } from "@/components/ClipEditor";
 import { useAuth } from "@/contexts/AuthContext";
 import { Loader2 } from "lucide-react";
 
@@ -30,6 +31,11 @@ const Index = () => {
     return null;
   }
 
+  const handleScheduleFromEditor = (clipData: { url: string; startTime: number; endTime: number }) => {
+    // Switch to schedule tab with clip data pre-filled
+    setActiveTab("schedule");
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
@@ -39,7 +45,8 @@ const Index = () => {
           {activeTab === "dashboard" && <Dashboard />}
           {activeTab === "accounts" && <AccountsManager />}
           {activeTab === "schedule" && <ScheduleManager />}
-          {!["dashboard", "accounts", "schedule"].includes(activeTab) && (
+          {activeTab === "clips" && <ClipEditor onSchedule={handleScheduleFromEditor} />}
+          {!["dashboard", "accounts", "schedule", "clips"].includes(activeTab) && (
             <div className="flex h-[60vh] items-center justify-center">
               <div className="text-center">
                 <div className="mb-4 text-6xl">🚀</div>
