@@ -5,9 +5,12 @@ import {
   Scissors, 
   Send, 
   Settings,
-  Zap
+  Zap,
+  LogOut
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 interface SidebarProps {
   activeTab: string;
@@ -24,6 +27,14 @@ const navItems = [
 ];
 
 export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/auth");
+  };
+
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-sidebar border-r border-border">
       <div className="flex h-full flex-col">
@@ -61,6 +72,31 @@ export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
             );
           })}
         </nav>
+
+        {/* User & Logout */}
+        {user && (
+          <div className="px-3 py-2 border-t border-border">
+            <div className="flex items-center gap-3 px-4 py-2">
+              <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center">
+                <span className="text-xs font-medium text-primary">
+                  {user.email?.charAt(0).toUpperCase()}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-foreground truncate">
+                  {user.email}
+                </p>
+              </div>
+              <button
+                onClick={handleSignOut}
+                className="p-2 text-muted-foreground hover:text-foreground transition-colors"
+                title="Sign out"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Pro Badge */}
         <div className="p-4">
