@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
 import { Dashboard } from "@/components/Dashboard";
 import { AccountsManager } from "@/components/AccountsManager";
+import { ScheduleManager } from "@/components/ScheduleManager";
 import { useAuth } from "@/contexts/AuthContext";
 import { Loader2 } from "lucide-react";
 
@@ -37,7 +38,8 @@ const Index = () => {
         <div className="mx-auto max-w-7xl">
           {activeTab === "dashboard" && <Dashboard />}
           {activeTab === "accounts" && <AccountsManager />}
-          {activeTab !== "dashboard" && activeTab !== "accounts" && (
+          {activeTab === "schedule" && <ScheduleManager />}
+          {!["dashboard", "accounts", "schedule"].includes(activeTab) && (
             <div className="flex h-[60vh] items-center justify-center">
               <div className="text-center">
                 <div className="mb-4 text-6xl">🚀</div>

@@ -56,6 +56,56 @@ export type Database = {
         }
         Relationships: []
       }
+      scheduled_posts: {
+        Row: {
+          caption: string | null
+          clip_url: string
+          connected_account_id: string
+          created_at: string
+          error_message: string | null
+          id: string
+          posted_at: string | null
+          scheduled_at: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          caption?: string | null
+          clip_url: string
+          connected_account_id: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          posted_at?: string | null
+          scheduled_at: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          caption?: string | null
+          clip_url?: string
+          connected_account_id?: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          posted_at?: string | null
+          scheduled_at?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scheduled_posts_connected_account_id_fkey"
+            columns: ["connected_account_id"]
+            isOneToOne: false
+            referencedRelation: "connected_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

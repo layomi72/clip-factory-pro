@@ -6,7 +6,8 @@ import {
   Send, 
   Settings,
   Zap,
-  LogOut
+  LogOut,
+  Calendar
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -22,6 +23,7 @@ const navItems = [
   { id: "streams", label: "Import Streams", icon: Video },
   { id: "clips", label: "Clips", icon: Scissors },
   { id: "accounts", label: "Accounts", icon: Users },
+  { id: "schedule", label: "Schedule", icon: Calendar },
   { id: "distribute", label: "Distribute", icon: Send },
   { id: "settings", label: "Settings", icon: Settings },
 ];
