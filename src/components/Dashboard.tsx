@@ -1,12 +1,16 @@
 import { useState } from "react";
-import { Video, Scissors, Users, TrendingUp, Eye, UserPlus, ArrowUp, ArrowDown } from "lucide-react";
+import { format } from "date-fns";
+import { Video, Scissors, Users, TrendingUp, Eye, UserPlus, ArrowUp, Calendar, Clock, Plus } from "lucide-react";
 import { StatsCard } from "./StatsCard";
 import { PlatformCard } from "./PlatformCard";
 import { StreamImporter } from "./StreamImporter";
 import { ClipQueue } from "./ClipQueue";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useConnectedAccounts } from "@/hooks/useConnectedAccounts";
+import { SchedulePostDialog } from "./SchedulePostDialog";
 
 // Platform icons as simple components
 const YouTubeIcon = () => (
@@ -56,9 +60,34 @@ const formatNumber = (num: number) => {
   return num.toString();
 };
 
+// Mock scheduled posts per account
+const mockScheduledPosts = [
+  { id: "1", accountUsername: "gaming_clips_yt", platform: "youtube", clipUrl: "https://clips.example.com/clip1.mp4", caption: "Epic gaming moment! 🎮", scheduledAt: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(), status: "pending" as const },
+  { id: "2", accountUsername: "tiktok_gaming", platform: "tiktok", clipUrl: "https://clips.example.com/clip2.mp4", caption: "Can't believe this happened!", scheduledAt: new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString(), status: "pending" as const },
+  { id: "3", accountUsername: "insta_highlights", platform: "instagram", clipUrl: "https://clips.example.com/clip3.mp4", caption: "Watch till the end 👀", scheduledAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), status: "pending" as const },
+  { id: "4", accountUsername: "gaming_clips_yt", platform: "youtube", clipUrl: "https://clips.example.com/clip4.mp4", caption: "Best play of the week", scheduledAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), status: "posted" as const },
+  { id: "5", accountUsername: "viral_tiktoks", platform: "tiktok", clipUrl: "https://clips.example.com/clip5.mp4", caption: "This went viral!", scheduledAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), status: "posted" as const },
+  { id: "6", accountUsername: "stream_clips", platform: "youtube", clipUrl: "https://clips.example.com/clip6.mp4", caption: "Funny stream moment", scheduledAt: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(), status: "pending" as const },
+];
+
+// Mock accounts with extended data
+const mockAccounts = [
+  { id: "1", platform: "youtube", platform_username: "gaming_clips_yt", followers: 125000, views: 2400000 },
+  { id: "2", platform: "youtube", platform_username: "stream_clips", followers: 89000, views: 1800000 },
+  { id: "3", platform: "tiktok", platform_username: "tiktok_gaming", followers: 156000, views: 4200000 },
+  { id: "4", platform: "tiktok", platform_username: "viral_tiktoks", followers: 234000, views: 8900000 },
+  { id: "5", platform: "instagram", platform_username: "insta_highlights", followers: 67000, views: 950000 },
+  { id: "6", platform: "instagram", platform_username: "reels_central", followers: 45000, views: 620000 },
+];
+
 export function Dashboard() {
   const [timePeriod, setTimePeriod] = useState<string>("month");
-  const { data: accounts = [] } = useConnectedAccounts();
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
+  const [selectedAccountForSchedule, setSelectedAccountForSchedule] = useState<string | null>(null);
+  const { data: connectedAccounts = [] } = useConnectedAccounts();
+
+  // Use real accounts if available, otherwise use mock data
+  const accounts = connectedAccounts.length > 0 ? connectedAccounts : mockAccounts;
 
   // Calculate combined stats from connected accounts
   const accountsByPlatform = accounts.reduce((acc, account) => {
@@ -306,8 +335,126 @@ export function Dashboard() {
         </div>
       </div>
 
+      {/* Per-Account Scheduling Section */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-xl">Account Scheduling</CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">
+                View and schedule uploads for each account individually
+              </p>
+            </div>
+            <Button onClick={() => { setSelectedAccountForSchedule(null); setScheduleDialogOpen(true); }}>
+              <Plus className="h-4 w-4 mr-2" />
+              Schedule New
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {(connectedAccounts.length > 0 ? connectedAccounts : mockAccounts).map((account) => {
+              const accountPosts = mockScheduledPosts.filter(
+                (p) => p.accountUsername === account.platform_username
+              );
+              const pendingPosts = accountPosts.filter((p) => p.status === "pending");
+              const postedPosts = accountPosts.filter((p) => p.status === "posted");
+              const stats = "followers" in account 
+                ? account 
+                : platformStats[account.platform] || { followers: 0, views: 0 };
+
+              return (
+                <div
+                  key={account.id}
+                  className="border border-border rounded-lg p-4 bg-secondary/20"
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">
+                        {account.platform === "youtube" && "🎬"}
+                        {account.platform === "tiktok" && "🎵"}
+                        {account.platform === "instagram" && "📸"}
+                        {account.platform === "twitch" && "🎮"}
+                      </span>
+                      <div>
+                        <p className="font-semibold">{account.platform_username}</p>
+                        <p className="text-sm text-muted-foreground capitalize">{account.platform}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4 text-sm">
+                      <div className="text-right">
+                        <p className="font-medium">{formatNumber(stats.followers)}</p>
+                        <p className="text-muted-foreground text-xs">Followers</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-medium">{formatNumber(stats.views)}</p>
+                        <p className="text-muted-foreground text-xs">Views</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setSelectedAccountForSchedule(account.id);
+                          setScheduleDialogOpen(true);
+                        }}
+                      >
+                        <Calendar className="h-3 w-3 mr-1" />
+                        Schedule
+                      </Button>
+                    </div>
+                  </div>
+
+                  {accountPosts.length > 0 ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                        <Badge variant="secondary" className="text-xs">
+                          {pendingPosts.length} pending
+                        </Badge>
+                        <Badge variant="outline" className="text-xs">
+                          {postedPosts.length} posted
+                        </Badge>
+                      </div>
+                      <div className="grid gap-2">
+                        {pendingPosts.slice(0, 3).map((post) => (
+                          <div
+                            key={post.id}
+                            className="flex items-center justify-between p-2 rounded bg-background/50 text-sm"
+                          >
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <Clock className="h-3 w-3 text-muted-foreground shrink-0" />
+                              <span className="truncate">{post.caption}</span>
+                            </div>
+                            <span className="text-xs text-muted-foreground shrink-0 ml-2">
+                              {format(new Date(post.scheduledAt), "MMM d, h:mm a")}
+                            </span>
+                          </div>
+                        ))}
+                        {pendingPosts.length > 3 && (
+                          <p className="text-xs text-muted-foreground text-center">
+                            +{pendingPosts.length - 3} more scheduled
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-2">
+                      No scheduled posts for this account
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Clip Queue */}
       <ClipQueue />
+
+      <SchedulePostDialog 
+        open={scheduleDialogOpen} 
+        onOpenChange={setScheduleDialogOpen}
+      />
     </div>
   );
 }
