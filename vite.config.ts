@@ -15,4 +15,7 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  // Ensure public files are served with correct MIME types
+  assetsInclude: ['**/*.txt'],
+  publicDir: 'public',
 }));
