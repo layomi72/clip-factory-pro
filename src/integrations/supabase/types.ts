@@ -56,6 +56,101 @@ export type Database = {
         }
         Relationships: []
       }
+      imported_streams: {
+        Row: {
+          created_at: string
+          duration_seconds: number | null
+          id: string
+          metadata: Json | null
+          platform: string
+          source_url: string
+          status: string
+          thumbnail_url: string | null
+          title: string | null
+          updated_at: string
+          user_id: string
+          video_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          duration_seconds?: number | null
+          id?: string
+          metadata?: Json | null
+          platform: string
+          source_url: string
+          status?: string
+          thumbnail_url?: string | null
+          title?: string | null
+          updated_at?: string
+          user_id: string
+          video_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          duration_seconds?: number | null
+          id?: string
+          metadata?: Json | null
+          platform?: string
+          source_url?: string
+          status?: string
+          thumbnail_url?: string | null
+          title?: string | null
+          updated_at?: string
+          user_id?: string
+          video_id?: string | null
+        }
+        Relationships: []
+      }
+      processing_jobs: {
+        Row: {
+          clip_end_time: number
+          clip_start_time: number
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          output_url: string | null
+          source_video_url: string
+          status: string
+          stream_id: string | null
+          user_id: string
+        }
+        Insert: {
+          clip_end_time: number
+          clip_start_time: number
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          output_url?: string | null
+          source_video_url: string
+          status?: string
+          stream_id?: string | null
+          user_id: string
+        }
+        Update: {
+          clip_end_time?: number
+          clip_start_time?: number
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          output_url?: string | null
+          source_video_url?: string
+          status?: string
+          stream_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "processing_jobs_stream_id_fkey"
+            columns: ["stream_id"]
+            isOneToOne: false
+            referencedRelation: "imported_streams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       scheduled_posts: {
         Row: {
           caption: string | null
