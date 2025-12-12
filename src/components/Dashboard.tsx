@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { format } from "date-fns";
-import { Video, Scissors, Users, TrendingUp, Eye, UserPlus, ArrowUp, Calendar, Clock, Plus } from "lucide-react";
+import { Video, Scissors, Users, TrendingUp, Eye, UserPlus, Calendar, Clock, Plus } from "lucide-react";
 import { StatsCard } from "./StatsCard";
 import { PlatformCard } from "./PlatformCard";
 import { StreamImporter } from "./StreamImporter";
@@ -10,6 +10,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useConnectedAccounts } from "@/hooks/useConnectedAccounts";
+import { useScheduledPosts } from "@/hooks/useScheduledPosts";
 import { SchedulePostDialog } from "./SchedulePostDialog";
 
 // Platform icons as simple components
@@ -37,21 +38,13 @@ const InstagramIcon = () => (
   </svg>
 );
 
-// Mock stats for each platform - in production these would come from API
-const platformStats: Record<string, { followers: number; views: number }> = {
-  youtube: { followers: 125000, views: 2400000 },
-  tiktok: { followers: 89000, views: 1800000 },
-  instagram: { followers: 67000, views: 950000 },
-  twitch: { followers: 23000, views: 340000 },
-};
-
-// Time period multipliers for simulated data
-const periodMultipliers: Record<string, { views: number; followers: number; label: string; changeLabel: string }> = {
-  today: { views: 0.003, followers: 0.0005, label: "Today", changeLabel: "vs yesterday" },
-  week: { views: 0.02, followers: 0.003, label: "This Week", changeLabel: "vs last week" },
-  month: { views: 0.08, followers: 0.012, label: "This Month", changeLabel: "vs last month" },
-  year: { views: 1, followers: 0.15, label: "This Year", changeLabel: "vs last year" },
-  allTime: { views: 1, followers: 1, label: "All Time", changeLabel: "total" },
+// Time period labels
+const periodLabels: Record<string, { label: string; changeLabel: string }> = {
+  today: { label: "Today", changeLabel: "vs yesterday" },
+  week: { label: "This Week", changeLabel: "vs last week" },
+  month: { label: "This Month", changeLabel: "vs last month" },
+  year: { label: "This Year", changeLabel: "vs last year" },
+  allTime: { label: "All Time", changeLabel: "total" },
 };
 
 const formatNumber = (num: number) => {
@@ -60,80 +53,19 @@ const formatNumber = (num: number) => {
   return num.toString();
 };
 
-// Mock scheduled posts per account
-const mockScheduledPosts = [
-  { id: "1", accountUsername: "gaming_clips_yt", platform: "youtube", clipUrl: "https://clips.example.com/clip1.mp4", caption: "Epic gaming moment! 🎮", scheduledAt: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(), status: "pending" as const },
-  { id: "2", accountUsername: "tiktok_gaming", platform: "tiktok", clipUrl: "https://clips.example.com/clip2.mp4", caption: "Can't believe this happened!", scheduledAt: new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString(), status: "pending" as const },
-  { id: "3", accountUsername: "insta_highlights", platform: "instagram", clipUrl: "https://clips.example.com/clip3.mp4", caption: "Watch till the end 👀", scheduledAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), status: "pending" as const },
-  { id: "4", accountUsername: "gaming_clips_yt", platform: "youtube", clipUrl: "https://clips.example.com/clip4.mp4", caption: "Best play of the week", scheduledAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), status: "posted" as const },
-  { id: "5", accountUsername: "viral_tiktoks", platform: "tiktok", clipUrl: "https://clips.example.com/clip5.mp4", caption: "This went viral!", scheduledAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), status: "posted" as const },
-  { id: "6", accountUsername: "stream_clips", platform: "youtube", clipUrl: "https://clips.example.com/clip6.mp4", caption: "Funny stream moment", scheduledAt: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(), status: "pending" as const },
-];
-
-// Mock accounts with extended data
-const mockAccounts = [
-  { id: "1", platform: "youtube", platform_username: "gaming_clips_yt", followers: 125000, views: 2400000 },
-  { id: "2", platform: "youtube", platform_username: "stream_clips", followers: 89000, views: 1800000 },
-  { id: "3", platform: "tiktok", platform_username: "tiktok_gaming", followers: 156000, views: 4200000 },
-  { id: "4", platform: "tiktok", platform_username: "viral_tiktoks", followers: 234000, views: 8900000 },
-  { id: "5", platform: "instagram", platform_username: "insta_highlights", followers: 67000, views: 950000 },
-  { id: "6", platform: "instagram", platform_username: "reels_central", followers: 45000, views: 620000 },
-];
-
 export function Dashboard() {
   const [timePeriod, setTimePeriod] = useState<string>("month");
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
-  const [selectedAccountForSchedule, setSelectedAccountForSchedule] = useState<string | null>(null);
-  const { data: connectedAccounts = [] } = useConnectedAccounts();
+  const { data: accounts = [] } = useConnectedAccounts();
+  const { data: scheduledPosts = [] } = useScheduledPosts();
 
-  // Use real accounts if available, otherwise use mock data
-  const accounts = connectedAccounts.length > 0 ? connectedAccounts : mockAccounts;
-
-  // Calculate combined stats from connected accounts
+  // Calculate accounts by platform
   const accountsByPlatform = accounts.reduce((acc, account) => {
     acc[account.platform] = (acc[account.platform] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
 
-  // Calculate total followers and views across all platforms
-  let baseTotalFollowers = 0;
-  let baseTotalViews = 0;
-
-  Object.entries(accountsByPlatform).forEach(([platform, count]) => {
-    const stats = platformStats[platform];
-    if (stats) {
-      baseTotalFollowers += stats.followers * count;
-      baseTotalViews += stats.views * count;
-    }
-  });
-
-  // If no accounts, show demo data
-  if (accounts.length === 0) {
-    baseTotalFollowers = 304000;
-    baseTotalViews = 5490000;
-  }
-
-  // Apply time period multiplier
-  const period = periodMultipliers[timePeriod];
-  const totalViews = Math.round(baseTotalViews * period.views);
-  const totalFollowers = timePeriod === "allTime" 
-    ? baseTotalFollowers 
-    : Math.round(baseTotalFollowers * period.followers);
-
-  // Generate random but consistent change percentages based on period
-  const getChange = (seed: number) => {
-    const changes: Record<string, number> = {
-      today: 5 + (seed % 10),
-      week: 8 + (seed % 15),
-      month: 15 + (seed % 20),
-      year: 45 + (seed % 30),
-      allTime: 0,
-    };
-    return changes[timePeriod];
-  };
-
-  const viewsChange = getChange(7);
-  const followersChange = getChange(3);
+  const period = periodLabels[timePeriod];
 
   return (
     <div className="space-y-8">
@@ -141,7 +73,7 @@ export function Dashboard() {
       <div>
         <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
         <p className="mt-1 text-muted-foreground">
-          Manage your streams and distribute clips across {accounts.length || 120} pages
+          Manage your streams and distribute clips across {accounts.length} accounts
         </p>
       </div>
 
@@ -169,16 +101,8 @@ export function Dashboard() {
                 <Eye className="h-6 w-6 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{formatNumber(totalViews)}</p>
-                <div className="flex items-center gap-1">
-                  <p className="text-sm text-muted-foreground">Total Views</p>
-                  {timePeriod !== "allTime" && (
-                    <span className="flex items-center text-xs text-green-500">
-                      <ArrowUp className="h-3 w-3" />
-                      {viewsChange}%
-                    </span>
-                  )}
-                </div>
+                <p className="text-2xl font-bold">—</p>
+                <p className="text-sm text-muted-foreground">Total Views</p>
               </div>
             </div>
             <div className="flex items-center gap-4">
@@ -186,18 +110,10 @@ export function Dashboard() {
                 <UserPlus className="h-6 w-6 text-green-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{formatNumber(totalFollowers)}</p>
-                <div className="flex items-center gap-1">
-                  <p className="text-sm text-muted-foreground">
-                    {timePeriod === "allTime" ? "Total Followers" : "New Followers"}
-                  </p>
-                  {timePeriod !== "allTime" && (
-                    <span className="flex items-center text-xs text-green-500">
-                      <ArrowUp className="h-3 w-3" />
-                      {followersChange}%
-                    </span>
-                  )}
-                </div>
+                <p className="text-2xl font-bold">—</p>
+                <p className="text-sm text-muted-foreground">
+                  {timePeriod === "allTime" ? "Total Followers" : "New Followers"}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-4">
@@ -205,7 +121,7 @@ export function Dashboard() {
                 <Users className="h-6 w-6 text-blue-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{accounts.length || 120}</p>
+                <p className="text-2xl font-bold">{accounts.length}</p>
                 <p className="text-sm text-muted-foreground">Connected Accounts</p>
               </div>
             </div>
@@ -214,12 +130,7 @@ export function Dashboard() {
                 <TrendingUp className="h-6 w-6 text-purple-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold">
-                  {accounts.length > 0 
-                    ? formatNumber(Math.round(totalViews / (accounts.length || 1)))
-                    : formatNumber(Math.round(totalViews / 120))
-                  }
-                </p>
+                <p className="text-2xl font-bold">—</p>
                 <p className="text-sm text-muted-foreground">Avg Views/Account</p>
               </div>
             </div>
@@ -228,7 +139,7 @@ export function Dashboard() {
           {/* Period comparison note */}
           {timePeriod !== "allTime" && (
             <p className="text-xs text-muted-foreground mt-4 text-center">
-              Compared to {period.changeLabel}
+              Stats will update once platform APIs are connected
             </p>
           )}
 
@@ -237,28 +148,25 @@ export function Dashboard() {
             <div className="mt-6 pt-6 border-t border-border">
               <p className="text-sm font-medium mb-3">Breakdown by Platform</p>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {Object.entries(accountsByPlatform).map(([platform, count]) => {
-                  const stats = platformStats[platform];
-                  return (
-                    <div 
-                      key={platform}
-                      className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50"
-                    >
-                      <span className="text-xl">
-                        {platform === "youtube" && "🎬"}
-                        {platform === "tiktok" && "🎵"}
-                        {platform === "instagram" && "📸"}
-                        {platform === "twitch" && "🎮"}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium capitalize text-sm">{platform}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {count} account{count !== 1 ? "s" : ""} • {formatNumber((stats?.followers || 0) * count)} followers
-                        </p>
-                      </div>
+                {Object.entries(accountsByPlatform).map(([platform, count]) => (
+                  <div 
+                    key={platform}
+                    className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50"
+                  >
+                    <span className="text-xl">
+                      {platform === "youtube" && "🎬"}
+                      {platform === "tiktok" && "🎵"}
+                      {platform === "instagram" && "📸"}
+                      {platform === "twitch" && "🎮"}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium capitalize text-sm">{platform}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {count} account{count !== 1 ? "s" : ""}
+                      </p>
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -269,29 +177,29 @@ export function Dashboard() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <StatsCard
           title="Total Streams"
-          value="24"
-          change="12% this week"
+          value="0"
+          change="—"
           trend="up"
           icon={Video}
         />
         <StatsCard
           title="Clips Generated"
-          value="1,847"
-          change="8% this week"
+          value="0"
+          change="—"
           trend="up"
           icon={Scissors}
         />
         <StatsCard
           title="Connected Accounts"
-          value={accounts.length > 0 ? accounts.length.toString() : "120"}
-          change="3 new"
+          value={accounts.length.toString()}
+          change={accounts.length > 0 ? `${accounts.length} connected` : "None yet"}
           trend="up"
           icon={Users}
         />
         <StatsCard
-          title="Total Reach"
-          value={formatNumber(totalViews)}
-          change="24% this month"
+          title="Scheduled Posts"
+          value={scheduledPosts.filter(p => p.status === "pending").length.toString()}
+          change={`${scheduledPosts.filter(p => p.status === "posted").length} posted`}
           trend="up"
           icon={TrendingUp}
         />
@@ -307,22 +215,22 @@ export function Dashboard() {
           <PlatformCard
             name="YouTube"
             icon={<YouTubeIcon />}
-            accounts={accountsByPlatform.youtube || 40}
-            clips={623}
+            accounts={accountsByPlatform.youtube || 0}
+            clips={0}
             platform="youtube"
           />
           <PlatformCard
             name="TikTok"
             icon={<TikTokIcon />}
-            accounts={accountsByPlatform.tiktok || 40}
-            clips={512}
+            accounts={accountsByPlatform.tiktok || 0}
+            clips={0}
             platform="tiktok"
           />
           <PlatformCard
             name="Instagram"
             icon={<InstagramIcon />}
-            accounts={accountsByPlatform.instagram || 40}
-            clips={489}
+            accounts={accountsByPlatform.instagram || 0}
+            clips={0}
             platform="instagram"
           />
           <PlatformCard
@@ -345,106 +253,102 @@ export function Dashboard() {
                 View and schedule uploads for each account individually
               </p>
             </div>
-            <Button onClick={() => { setSelectedAccountForSchedule(null); setScheduleDialogOpen(true); }}>
+            <Button onClick={() => setScheduleDialogOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
               Schedule New
             </Button>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {(connectedAccounts.length > 0 ? connectedAccounts : mockAccounts).map((account) => {
-              const accountPosts = mockScheduledPosts.filter(
-                (p) => p.accountUsername === account.platform_username
-              );
-              const pendingPosts = accountPosts.filter((p) => p.status === "pending");
-              const postedPosts = accountPosts.filter((p) => p.status === "posted");
-              const stats = "followers" in account 
-                ? account 
-                : platformStats[account.platform] || { followers: 0, views: 0 };
+          {accounts.length === 0 ? (
+            <div className="text-center py-8">
+              <Users className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              <p className="text-muted-foreground">No connected accounts yet</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Connect your social media accounts to start scheduling posts
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {accounts.map((account) => {
+                const accountPosts = scheduledPosts.filter(
+                  (p) => p.connected_account_id === account.id
+                );
+                const pendingPosts = accountPosts.filter((p) => p.status === "pending");
+                const postedPosts = accountPosts.filter((p) => p.status === "posted");
 
-              return (
-                <div
-                  key={account.id}
-                  className="border border-border rounded-lg p-4 bg-secondary/20"
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl">
-                        {account.platform === "youtube" && "🎬"}
-                        {account.platform === "tiktok" && "🎵"}
-                        {account.platform === "instagram" && "📸"}
-                        {account.platform === "twitch" && "🎮"}
-                      </span>
-                      <div>
-                        <p className="font-semibold">{account.platform_username}</p>
-                        <p className="text-sm text-muted-foreground capitalize">{account.platform}</p>
+                return (
+                  <div
+                    key={account.id}
+                    className="border border-border rounded-lg p-4 bg-secondary/20"
+                  >
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl">
+                          {account.platform === "youtube" && "🎬"}
+                          {account.platform === "tiktok" && "🎵"}
+                          {account.platform === "instagram" && "📸"}
+                          {account.platform === "twitch" && "🎮"}
+                        </span>
+                        <div>
+                          <p className="font-semibold">{account.platform_username}</p>
+                          <p className="text-sm text-muted-foreground capitalize">{account.platform}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4 text-sm">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setScheduleDialogOpen(true)}
+                        >
+                          <Calendar className="h-3 w-3 mr-1" />
+                          Schedule
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4 text-sm">
-                      <div className="text-right">
-                        <p className="font-medium">{formatNumber(stats.followers)}</p>
-                        <p className="text-muted-foreground text-xs">Followers</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-medium">{formatNumber(stats.views)}</p>
-                        <p className="text-muted-foreground text-xs">Views</p>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setSelectedAccountForSchedule(account.id);
-                          setScheduleDialogOpen(true);
-                        }}
-                      >
-                        <Calendar className="h-3 w-3 mr-1" />
-                        Schedule
-                      </Button>
-                    </div>
-                  </div>
 
-                  {accountPosts.length > 0 ? (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-                        <Badge variant="secondary" className="text-xs">
-                          {pendingPosts.length} pending
-                        </Badge>
-                        <Badge variant="outline" className="text-xs">
-                          {postedPosts.length} posted
-                        </Badge>
-                      </div>
-                      <div className="grid gap-2">
-                        {pendingPosts.slice(0, 3).map((post) => (
-                          <div
-                            key={post.id}
-                            className="flex items-center justify-between p-2 rounded bg-background/50 text-sm"
-                          >
-                            <div className="flex items-center gap-2 min-w-0 flex-1">
-                              <Clock className="h-3 w-3 text-muted-foreground shrink-0" />
-                              <span className="truncate">{post.caption}</span>
+                    {accountPosts.length > 0 ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                          <Badge variant="secondary" className="text-xs">
+                            {pendingPosts.length} pending
+                          </Badge>
+                          <Badge variant="outline" className="text-xs">
+                            {postedPosts.length} posted
+                          </Badge>
+                        </div>
+                        <div className="grid gap-2">
+                          {pendingPosts.slice(0, 3).map((post) => (
+                            <div
+                              key={post.id}
+                              className="flex items-center justify-between p-2 rounded bg-background/50 text-sm"
+                            >
+                              <div className="flex items-center gap-2 min-w-0 flex-1">
+                                <Clock className="h-3 w-3 text-muted-foreground shrink-0" />
+                                <span className="truncate">{post.caption || "No caption"}</span>
+                              </div>
+                              <span className="text-xs text-muted-foreground shrink-0 ml-2">
+                                {format(new Date(post.scheduled_at), "MMM d, h:mm a")}
+                              </span>
                             </div>
-                            <span className="text-xs text-muted-foreground shrink-0 ml-2">
-                              {format(new Date(post.scheduledAt), "MMM d, h:mm a")}
-                            </span>
-                          </div>
-                        ))}
-                        {pendingPosts.length > 3 && (
-                          <p className="text-xs text-muted-foreground text-center">
-                            +{pendingPosts.length - 3} more scheduled
-                          </p>
-                        )}
+                          ))}
+                          {pendingPosts.length > 3 && (
+                            <p className="text-xs text-muted-foreground text-center">
+                              +{pendingPosts.length - 3} more scheduled
+                            </p>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground text-center py-2">
-                      No scheduled posts for this account
-                    </p>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-2">
+                        No scheduled posts for this account
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
 
