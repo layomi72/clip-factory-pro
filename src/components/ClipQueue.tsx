@@ -63,14 +63,14 @@ export function ClipQueue() {
       if (!user) return [];
       
       const { data, error } = await supabase
-        .from("processing_jobs")
+        .from("processing_jobs" as any)
         .select("*")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(10);
 
       if (error) throw error;
-      return data as ProcessingJob[];
+      return (data || []) as unknown as ProcessingJob[];
     },
     enabled: !!user,
     refetchInterval: 5000, // Refetch every 5 seconds to get status updates

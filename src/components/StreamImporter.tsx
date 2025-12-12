@@ -11,7 +11,8 @@ import {
   CheckCircle2,
   Link2,
   Sparkles,
-  Loader2
+  Loader2,
+  Zap
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,19 +34,19 @@ import { videoApi, analysisApi } from "@/services/api";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Sparkles, Zap } from "lucide-react";
 import { AutoClipGenerator } from "./AutoClipGenerator";
 
 interface StreamItem {
   id: string;
   title: string | null;
-  thumbnail: string | null;
-  duration: number | null;
+  thumbnail_url: string | null;
+  duration_seconds: number | null;
   platform: string;
   source_url: string;
   status: string;
   created_at: string;
   video_id?: string | null;
+  metadata?: any;
 }
 
 export function StreamImporter() {
@@ -69,13 +70,13 @@ export function StreamImporter() {
       if (!user) return [];
       
       const { data, error } = await supabase
-        .from("imported_streams")
+        .from("imported_streams" as any)
         .select("*")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      return data as StreamItem[];
+      return (data || []) as unknown as StreamItem[];
     },
     enabled: !!user,
   });
@@ -91,8 +92,8 @@ export function StreamImporter() {
       const result = await videoApi.downloadVideo(videoUrl, user.id);
       
       // Save to database
-      const { data, error } = await supabase
-        .from("imported_streams")
+      const { data: insertedData, error } = await supabase
+        .from("imported_streams" as any)
         .insert({
           user_id: user.id,
           source_url: videoUrl,
@@ -103,11 +104,13 @@ export function StreamImporter() {
           duration_seconds: result.metadata?.duration || null,
           metadata: result.metadata,
           status: "imported",
-        })
+        } as any)
         .select()
         .single();
 
       if (error) throw error;
+      
+      const streamData = insertedData as any;
 
       // Auto-generate viral clips if enabled
       if (autoGenerateClips && result.metadata?.duration) {
@@ -116,17 +119,17 @@ export function StreamImporter() {
             videoUrl,
             result.metadata.duration,
             user.id,
-            data.id
+            streamData.id
           );
           
-          return { ...data, clipsGenerated: analysisResult.clipsFound, jobsCreated: analysisResult.jobsCreated };
+          return { ...streamData, clipsGenerated: analysisResult.clipsFound, jobsCreated: analysisResult.jobsCreated };
         } catch (analysisError) {
           console.error("Auto-clip generation failed:", analysisError);
           // Continue even if analysis fails
         }
       }
 
-      return data;
+      return streamData;
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["imported-streams"] });
