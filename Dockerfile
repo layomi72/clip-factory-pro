@@ -15,9 +15,8 @@ RUN pip3 install --break-system-packages yt-dlp
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
-RUN npm ci --only=production
+# Install only express (the only dependency needed for FFmpeg service)
+RUN npm init -y && npm install express
 
 # Copy scripts
 COPY scripts/ ./scripts/
