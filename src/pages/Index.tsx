@@ -6,6 +6,7 @@ import { AccountsManager } from "@/components/AccountsManager";
 import { ScheduleManager } from "@/components/ScheduleManager";
 import { ClipEditor } from "@/components/ClipEditor";
 import { StreamImporter } from "@/components/StreamImporter";
+import { Settings } from "@/components/Settings";
 import { useAuth } from "@/contexts/AuthContext";
 import { Loader2 } from "lucide-react";
 
@@ -47,7 +48,8 @@ const Index = () => {
           {activeTab === "schedule" && <ScheduleManager />}
           {activeTab === "clips" && <ClipEditor onSchedule={handleScheduleFromEditor} />}
           {activeTab === "streams" && <StreamImporter />}
-          {!["dashboard", "accounts", "schedule", "clips", "streams"].includes(activeTab) && (
+          {activeTab === "settings" && <Settings />}
+          {!["dashboard", "accounts", "schedule", "clips", "streams", "settings"].includes(activeTab) && (
             <div className="flex h-[60vh] items-center justify-center">
               <div className="text-center">
                 <div className="mb-4 text-6xl">🚀</div>
