@@ -10,9 +10,9 @@ import {
   RefreshCw,
   CheckCircle2,
   Link2,
-  Sparkles,
   Loader2,
-  Zap
+  Zap,
+  Sparkles
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -69,14 +69,14 @@ export function StreamImporter() {
     queryFn: async () => {
       if (!user) return [];
       
-      const { data, error } = await supabase
-        .from("imported_streams" as any)
+      const { data, error } = await (supabase
+        .from("imported_streams")
         .select("*")
         .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false }) as any);
 
       if (error) throw error;
-      return (data || []) as unknown as StreamItem[];
+      return (data || []) as StreamItem[];
     },
     enabled: !!user,
   });
@@ -92,8 +92,8 @@ export function StreamImporter() {
       const result = await videoApi.downloadVideo(videoUrl, user.id);
       
       // Save to database
-      const { data: insertedData, error } = await supabase
-        .from("imported_streams" as any)
+      const { data: insertedData, error } = await (supabase
+        .from("imported_streams")
         .insert({
           user_id: user.id,
           source_url: videoUrl,
@@ -104,9 +104,9 @@ export function StreamImporter() {
           duration_seconds: result.metadata?.duration || null,
           metadata: result.metadata,
           status: "imported",
-        } as any)
+        })
         .select()
-        .single();
+        .single() as any);
 
       if (error) throw error;
       
