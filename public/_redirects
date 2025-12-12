@@ -1,0 +1,9 @@
+# Serve static files directly
+/tiktok7jnWfAGd5smRtWZ94dKVYDTMwNmIzEu3.txt    /tiktok7jnWfAGd5smRtWZ94dKVYDTMwNmIzEu3.txt    200
+/tiktokaBemzEm9f1y23n4ldc4LNvwd1k6yMkyc.txt    /tiktokaBemzEm9f1y23n4ldc4LNvwd1k6yMkyc.txt    200
+/terms.html    /terms.html    200
+/privacy.html    /privacy.html    200
+/robots.txt    /robots.txt    200
+
+# SPA fallback - must be last
+/*    /index.html    200
