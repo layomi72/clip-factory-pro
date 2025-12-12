@@ -14,6 +14,7 @@ const { downloadFile, cleanupFile } = require('./download-utils');
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 
 const app = express();
 app.use(express.json());
@@ -30,6 +31,56 @@ app.use((req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3001;
+
+/**
+ * Get R2 client if credentials are available
+ */
+function getR2Client() {
+  const accountId = process.env.R2_ACCOUNT_ID;
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+  const bucketName = process.env.R2_BUCKET_NAME || 'clip-factory';
+  
+  if (!accountId || !accessKeyId || !secretAccessKey) {
+    return null; // R2 not configured
+  }
+  
+  return {
+    client: new S3Client({
+      region: 'auto',
+      endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+      credentials: {
+        accessKeyId,
+        secretAccessKey,
+      },
+    }),
+    bucketName,
+  };
+}
+
+/**
+ * Upload file to R2
+ */
+async function uploadToR2(filePath, key) {
+  const r2 = getR2Client();
+  if (!r2) {
+    return null;
+  }
+  
+  const fileBuffer = fs.readFileSync(filePath);
+  const command = new PutObjectCommand({
+    Bucket: r2.bucketName,
+    Key: key,
+    Body: fileBuffer,
+    ContentType: 'video/mp4',
+  });
+  
+  await r2.client.send(command);
+  
+  // Return public URL or presigned URL
+  const publicUrl = process.env.R2_PUBLIC_URL || `https://${r2.bucketName}.r2.dev`;
+  return `${publicUrl}/${key}`;
+}
 
 /**
  * Analyze video endpoint
@@ -140,22 +191,47 @@ app.post('/process', async (req, res) => {
         maxBuffer: 50 * 1024 * 1024 // 50MB buffer for large videos
       });
       
-      // Step 3: Read processed clip and return as base64
+      // Step 3: Upload to R2 or return base64
       if (!fs.existsSync(outputPath)) {
         throw new Error('Clip processing failed - output file not created');
       }
       
       const clipBuffer = fs.readFileSync(outputPath);
-      const clipBase64 = clipBuffer.toString('base64');
-      const clipDataUrl = `data:video/mp4;base64,${clipBase64}`;
+      const clipSize = clipBuffer.length;
       
-      // Return clip data
-      res.json({
-        success: true,
-        clipUrl: clipDataUrl,
-        duration: duration,
-        size: clipBuffer.length,
-      });
+      // Try to upload to R2 first (if configured)
+      const storageKey = `clips/${req.body.userId || 'default'}/${jobId}.mp4`;
+      const r2Url = await uploadToR2(outputPath, storageKey);
+      
+      if (r2Url) {
+        // Successfully uploaded to R2
+        console.log(`Uploaded clip to R2: ${r2Url}`);
+        res.json({
+          success: true,
+          clipUrl: r2Url,
+          duration: duration,
+          size: clipSize,
+          storage: 'r2',
+        });
+      } else {
+        // R2 not configured, return base64 (for small clips only)
+        if (clipSize > 50 * 1024 * 1024) { // 50MB limit
+          throw new Error('Clip too large for base64. Please configure R2 storage.');
+        }
+        
+        const clipBase64 = clipBuffer.toString('base64');
+        const clipDataUrl = `data:video/mp4;base64,${clipBase64}`;
+        
+        console.log(`Returning clip as base64 (${(clipSize / 1024 / 1024).toFixed(2)}MB)`);
+        res.json({
+          success: true,
+          clipUrl: clipDataUrl,
+          duration: duration,
+          size: clipSize,
+          storage: 'base64',
+          warning: 'R2 storage not configured. Large clips may fail.',
+        });
+      }
       
     } finally {
       // Cleanup temp files
