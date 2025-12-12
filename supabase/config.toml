@@ -2,3 +2,9 @@ project_id = "jpndzcsqfuumdrcyjfxl"
 
 [functions.process-scheduled-posts]
 verify_jwt = false
+
+[functions.tiktok-oauth]
+verify_jwt = true
+
+[functions.tiktok-oauth-callback]
+verify_jwt = false
