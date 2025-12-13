@@ -54,9 +54,14 @@ serve(async (req) => {
 
     const authUrl = `${baseUrl}?${params.toString()}`;
 
-    console.log('Generated TikTok OAuth URL for user:', userId);
+    console.log('=== TikTok OAuth Debug Info ===');
+    console.log('Client Key (first 8 chars):', clientKey.substring(0, 8) + '...');
+    console.log('Client Key length:', clientKey.length);
     console.log('Redirect URI:', callbackUrl);
+    console.log('Redirect URI length:', callbackUrl.length);
     console.log('Scopes:', scopes);
+    console.log('Full OAuth URL:', authUrl);
+    console.log('==============================');
 
     return new Response(
       JSON.stringify({ authUrl }),
