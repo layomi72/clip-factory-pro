@@ -114,7 +114,15 @@ export function StreamImporter() {
 
       // Auto-generate viral clips if enabled
       if (autoGenerateClips) {
-        const duration = result.metadata?.duration || 0;
+        // Get duration from result metadata or streamData metadata
+        const duration = result.metadata?.duration || streamData.metadata?.duration || streamData.duration_seconds || 0;
+        
+        console.log("Auto-generate check:", {
+          hasAutoGenerate: autoGenerateClips,
+          resultDuration: result.metadata?.duration,
+          streamDuration: streamData.duration_seconds,
+          finalDuration: duration
+        });
         
         if (!duration || duration <= 0) {
           console.warn("Cannot generate clips: invalid duration", duration);
@@ -142,10 +150,21 @@ export function StreamImporter() {
             console.log("Analysis result:", analysisResult);
             
             if (analysisResult.clipsFound > 0) {
+              // Set recentlyImported to show the AutoClipGenerator component
+              setRecentlyImported({
+                id: streamData.id,
+                url: videoUrl,
+                duration: duration,
+              });
+              
               return { 
                 ...streamData, 
                 clipsGenerated: analysisResult.clipsFound, 
-                jobsCreated: analysisResult.jobsCreated 
+                jobsCreated: analysisResult.jobsCreated,
+                metadata: {
+                  ...streamData.metadata,
+                  duration: duration
+                }
               };
             } else {
               console.warn("Analysis returned 0 clips");
