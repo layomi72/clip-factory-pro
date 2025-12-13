@@ -59,7 +59,7 @@ export function AutoClipGenerator({ videoUrl, duration, importedStreamId }: Auto
         .order("created_at", { ascending: false });
       
       if (error) throw error;
-      return (data || []) as ProcessedClip[];
+      return data || [];
     },
     enabled: !!user && !!videoUrl,
     refetchInterval: 5000, // Poll every 5 seconds for status updates
