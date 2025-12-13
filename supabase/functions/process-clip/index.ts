@@ -140,13 +140,25 @@ async function processClip(
   }
 
   // Alternative: Queue for GitHub Actions processing
-  // Store processing job in database
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  // Update the existing job to pending status (job was already created above)
+  if (job) {
+    await supabase
+      .from("processing_jobs")
+      .update({
+        status: "pending",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", job.id);
 
-  // Create processing job
-  const { data: job, error } = await supabase
+    // Return job ID - actual processing will be done by GitHub Actions
+    return {
+      clipUrl: `pending:${job.id}`, // Placeholder until processing completes
+      duration: endTime - startTime,
+    };
+  }
+
+  // Fallback: Create new job if none exists
+  const { data: newJob, error: newJobError } = await supabase
     .from("processing_jobs")
     .insert({
       source_video_url: sourceUrl,
@@ -159,13 +171,12 @@ async function processClip(
     .select()
     .single();
 
-  if (error) {
-    throw new Error(`Failed to queue processing job: ${error.message}`);
+  if (newJobError) {
+    throw new Error(`Failed to queue processing job: ${newJobError.message}`);
   }
 
-  // Return job ID - actual processing will be done by GitHub Actions
   return {
-    clipUrl: `pending:${job.id}`, // Placeholder until processing completes
+    clipUrl: `pending:${newJob.id}`,
     duration: endTime - startTime,
   };
 }
