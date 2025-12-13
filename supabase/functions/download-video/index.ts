@@ -74,39 +74,38 @@ async function downloadVideo(url: string, platform: string): Promise<{ videoUrl:
     }
 
     // Try to get video info from YouTube oEmbed API (free, no API key needed)
+    // Note: oEmbed doesn't provide duration, but we can get title and thumbnail
+    let title: string | null = null;
+    let thumbnail: string | null = null;
+    
     try {
       const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
       const oembedResponse = await fetch(oembedUrl);
       if (oembedResponse.ok) {
         const oembedData = await oembedResponse.json();
-        // oEmbed doesn't give duration, but we can use a default for now
-        // Actual duration will be fetched during processing
-        return {
-          videoUrl: url,
-          metadata: {
-            platform: "youtube",
-            videoId,
-            url,
-            title: oembedData.title,
-            thumbnail: oembedData.thumbnail_url,
-            // Use a default duration - will be updated during actual processing
-            duration: 300, // 5 minutes default, will be corrected during processing
-          },
-        };
+        title = oembedData.title || null;
+        thumbnail = oembedData.thumbnail_url || null;
       }
     } catch (error) {
       console.warn("Failed to fetch YouTube oEmbed data:", error);
     }
 
-    // Fallback: return basic metadata
+    // For duration, we'll use a reasonable default
+    // YouTube videos are typically 5-60 minutes, so we'll use 10 minutes as default
+    // The actual duration will be fetched during video processing
+    // This default allows clip generation to work immediately
+    const defaultDuration = 600; // 10 minutes in seconds
+
     return {
       videoUrl: url,
       metadata: {
         platform: "youtube",
         videoId,
         url,
-        // Use a default duration for clip generation
-        duration: 300, // 5 minutes default
+        title,
+        thumbnail,
+        // Use default duration - actual duration will be fetched during processing
+        duration: defaultDuration,
       },
     };
   }
