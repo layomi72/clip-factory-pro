@@ -240,8 +240,7 @@ serve(async (req) => {
           clip_start_time: clip.startTime,
           clip_end_time: clip.endTime,
           status: "pending",
-          imported_stream_id: importedStreamId || null,
-          created_at: new Date().toISOString(),
+          stream_id: importedStreamId || null,
         })
         .select()
         .single();
