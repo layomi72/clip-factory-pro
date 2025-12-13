@@ -28,9 +28,9 @@ serve(async (req) => {
     const baseUrl = 'https://www.tiktok.com/v2/auth/authorize/';
     
     // Scopes needed for content posting
+    // Note: video.upload is the correct scope name (not video.publish)
     const scopes = [
       'user.info.basic',
-      'video.publish',
       'video.upload'
     ].join(',');
 
