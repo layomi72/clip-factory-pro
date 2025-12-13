@@ -35,18 +35,28 @@ serve(async (req) => {
       return Response.redirect(`${frontendUrl}/?error=invalid_state`);
     }
 
-    const clientKey = Deno.env.get('TIKTOK_CLIENT_KEY');
-    const clientSecret = Deno.env.get('TIKTOK_CLIENT_SECRET');
+    const clientKey = Deno.env.get('TIKTOK_CLIENT_KEY')?.trim();
+    const clientSecret = Deno.env.get('TIKTOK_CLIENT_SECRET')?.trim();
 
     if (!clientKey || !clientSecret) {
       console.error('Missing TikTok credentials');
       return Response.redirect(`${frontendUrl}/?error=server_configuration_error`);
     }
+    
+    // Log for debugging (first few chars only for security)
+    console.log('=== TikTok OAuth Callback Debug ===');
+    console.log('Client Key (first 8 chars):', clientKey.substring(0, 8) + '...');
+    console.log('Client Secret (first 8 chars):', clientSecret.substring(0, 8) + '...');
+    console.log('Client Key length:', clientKey.length);
+    console.log('Client Secret length:', clientSecret.length);
 
     const callbackUrl = `${supabaseUrl}/functions/v1/tiktok-oauth-callback`;
 
     // Exchange code for access token
     console.log('Exchanging code for access token...');
+    console.log('Callback URL:', callbackUrl);
+    console.log('Code received:', code ? code.substring(0, 10) + '...' : 'MISSING');
+    
     const tokenResponse = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
       method: 'POST',
       headers: {
@@ -63,6 +73,7 @@ serve(async (req) => {
 
     const tokenData = await tokenResponse.json();
     console.log('Token response status:', tokenResponse.status);
+    console.log('Token response data:', JSON.stringify(tokenData));
 
     if (tokenData.error || !tokenData.access_token) {
       console.error('Token exchange failed:', tokenData);
