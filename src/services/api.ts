@@ -26,6 +26,14 @@ export interface ProcessClipResponse {
   message?: string;
 }
 
+export interface ProcessClipOptions {
+  addCaptions?: boolean;
+  captionText?: string;
+  addTransitions?: boolean;
+  enhanceAudio?: boolean;
+  videoQuality?: "high" | "medium" | "low";
+}
+
 export interface OAuthResponse {
   authUrl: string;
 }
@@ -122,6 +130,9 @@ export interface ClipSuggestion {
   score: number;
   reason: string;
   type: "reaction" | "action" | "funny" | "dramatic" | "highlight";
+  title?: string; // Clickbait title
+  caption?: string; // Viral-optimized caption
+  hashtags?: string[]; // Hashtags for social media
 }
 
 export interface AnalyzeVideoResponse {
@@ -174,14 +185,15 @@ export const analysisApi = {
  */
 export const processingApi = {
   /**
-   * Process a video clip
+   * Process a video clip with optional editing features
    */
   async processClip(
     sourceUrl: string,
     startTime: number,
     endTime: number,
     userId: string,
-    clipId: string
+    clipId: string,
+    options?: ProcessClipOptions
   ): Promise<ProcessClipResponse> {
     return invokeFunction<ProcessClipResponse>("process-clip", {
       sourceUrl,
@@ -189,6 +201,7 @@ export const processingApi = {
       endTime,
       userId,
       clipId,
+      options: options || {},
     });
   },
 };

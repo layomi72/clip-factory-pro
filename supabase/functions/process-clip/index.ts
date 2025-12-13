@@ -28,40 +28,115 @@ const corsHeaders = {
  * 2. Call external FFmpeg service
  * 3. Use Supabase Edge Function with FFmpeg (if available)
  */
+interface ProcessOptions {
+  addCaptions?: boolean;
+  captionText?: string;
+  addTransitions?: boolean;
+  enhanceAudio?: boolean;
+  videoQuality?: "high" | "medium" | "low";
+}
+
 async function processClip(
   sourceUrl: string,
   startTime: number,
   endTime: number,
   userId: string,
-  clipId: string
+  clipId: string,
+  options?: ProcessOptions
 ): Promise<{ clipUrl: string; duration: number }> {
   // Check for FFmpeg service URL (try both env var names)
   const processingServiceUrl = Deno.env.get("FFMPEG_SERVICE_URL") || 
                                 Deno.env.get("FFMPEG_ANALYSIS_SERVICE_URL");
   
+  // Create Supabase client for job tracking
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+  // Create processing job in database first
+  const { data: job, error: jobError } = await supabase
+    .from("processing_jobs")
+    .insert({
+      source_video_url: sourceUrl,
+      clip_start_time: startTime,
+      clip_end_time: endTime,
+      user_id: userId,
+      status: "processing",
+      created_at: new Date().toISOString(),
+    })
+    .select()
+    .single();
+
+  if (jobError) {
+    console.error("Failed to create processing job:", jobError);
+    // Continue anyway - job creation failure shouldn't stop processing
+  }
+
   if (processingServiceUrl) {
-    // Call external FFmpeg processing service
-    const response = await fetch(`${processingServiceUrl}/process`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sourceUrl,
-        startTime,
-        endTime,
-        userId,
-        clipId,
-      }),
-    });
+    // Call external FFmpeg processing service with options
+    try {
+      const response = await fetch(`${processingServiceUrl}/process`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceUrl,
+          startTime,
+          endTime,
+          userId,
+          clipId,
+          options: options || {},
+        }),
+      });
 
-    if (!response.ok) {
-      throw new Error(`Processing failed: ${response.statusText}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        // Update job status to failed
+        if (job) {
+          await supabase
+            .from("processing_jobs")
+            .update({
+              status: "failed",
+              error_message: `Processing failed: ${response.statusText}`,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", job.id);
+        }
+        throw new Error(`Processing failed: ${response.statusText} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      
+      // Update job with result
+      if (job) {
+        await supabase
+          .from("processing_jobs")
+          .update({
+            status: "completed",
+            output_url: result.clipUrl,
+            completed_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", job.id);
+      }
+      
+      return {
+        clipUrl: result.clipUrl,
+        duration: result.duration,
+      };
+    } catch (error) {
+      // Update job status to failed
+      if (job) {
+        await supabase
+          .from("processing_jobs")
+          .update({
+            status: "failed",
+            error_message: error instanceof Error ? error.message : "Unknown error",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", job.id);
+      }
+      throw error;
     }
-
-    const result = await response.json();
-    return {
-      clipUrl: result.clipUrl,
-      duration: result.duration,
-    };
   }
 
   // Alternative: Queue for GitHub Actions processing
@@ -115,7 +190,7 @@ serve(async (req) => {
   }
 
   try {
-    const { sourceUrl, startTime, endTime, userId, clipId } = await req.json();
+    const { sourceUrl, startTime, endTime, userId, clipId, options } = await req.json();
 
     // Validate inputs
     if (!sourceUrl || startTime === undefined || endTime === undefined || !userId || !clipId) {
@@ -143,9 +218,10 @@ serve(async (req) => {
     }
 
     console.log(`Processing clip: ${clipId} from ${sourceUrl} (${startTime}s - ${endTime}s)`);
+    console.log(`Processing options:`, options || {});
 
-    // Process the clip
-    const result = await processClip(sourceUrl, startTime, endTime, userId, clipId);
+    // Process the clip with options
+    const result = await processClip(sourceUrl, startTime, endTime, userId, clipId, options);
 
     return new Response(
       JSON.stringify({
