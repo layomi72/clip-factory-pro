@@ -73,15 +73,40 @@ async function downloadVideo(url: string, platform: string): Promise<{ videoUrl:
       throw new Error("Invalid YouTube URL");
     }
 
-    // Use YouTube Data API to get video info
-    // Then download using yt-dlp or direct stream
-    // For now, return the video ID - actual download will be handled by processing service
+    // Try to get video info from YouTube oEmbed API (free, no API key needed)
+    try {
+      const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+      const oembedResponse = await fetch(oembedUrl);
+      if (oembedResponse.ok) {
+        const oembedData = await oembedResponse.json();
+        // oEmbed doesn't give duration, but we can use a default for now
+        // Actual duration will be fetched during processing
+        return {
+          videoUrl: url,
+          metadata: {
+            platform: "youtube",
+            videoId,
+            url,
+            title: oembedData.title,
+            thumbnail: oembedData.thumbnail_url,
+            // Use a default duration - will be updated during actual processing
+            duration: 300, // 5 minutes default, will be corrected during processing
+          },
+        };
+      }
+    } catch (error) {
+      console.warn("Failed to fetch YouTube oEmbed data:", error);
+    }
+
+    // Fallback: return basic metadata
     return {
       videoUrl: url,
       metadata: {
         platform: "youtube",
         videoId,
         url,
+        // Use a default duration for clip generation
+        duration: 300, // 5 minutes default
       },
     };
   }
@@ -93,6 +118,8 @@ async function downloadVideo(url: string, platform: string): Promise<{ videoUrl:
       metadata: {
         platform: "twitch",
         url,
+        // Use a default duration for clip generation
+        duration: 3600, // 1 hour default for Twitch VODs
       },
     };
   }
@@ -103,6 +130,8 @@ async function downloadVideo(url: string, platform: string): Promise<{ videoUrl:
       metadata: {
         platform: "tiktok",
         url,
+        // Use a default duration for clip generation
+        duration: 60, // 1 minute default for TikTok videos
       },
     };
   }
