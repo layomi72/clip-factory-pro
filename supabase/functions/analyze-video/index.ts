@@ -584,6 +584,10 @@ serve(async (req) => {
     const clips = await analyzeVideoForClips(videoUrl, duration);
     console.log(`Found ${clips.length} potential clips`);
 
+    // Check if FFmpeg service is configured
+    const ffmpegServiceUrl = Deno.env.get("FFMPEG_ANALYSIS_SERVICE_URL") || Deno.env.get("FFMPEG_SERVICE_URL");
+    const processingAvailable = !!ffmpegServiceUrl;
+
     // Save clip suggestions to database
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -603,7 +607,7 @@ serve(async (req) => {
           source_video_url: videoUrl,
           clip_start_time: clip.startTime,
           clip_end_time: clip.endTime,
-          status: "pending",
+          status: processingAvailable ? "pending" : "awaiting_service",
           stream_id: importedStreamId || null,
         })
         .select()
@@ -622,10 +626,8 @@ serve(async (req) => {
     
     console.log(`Successfully created ${jobs.length} processing jobs`);
 
-    // Generate elite viral metadata (titles, captions) for each clip
-    // Extract triggers from reason for better title generation
-    const clipsWithMetadata = clips.map(c => {
-      // Parse triggers from reason if available
+    // Try to enhance clips with AI-generated viral content
+    let clipsWithMetadata = clips.map(c => {
       const triggers: string[] = [];
       if (c.reason.includes("Shock")) triggers.push("shock_disbelief");
       if (c.reason.includes("Escalation")) triggers.push("escalation");
@@ -645,8 +647,36 @@ serve(async (req) => {
         title: title,
         caption: caption,
         hashtags: hashtags,
+        triggers: triggers,
+        features: {
+          hasLoudAudio: c.reason.includes("energy") || c.reason.includes("audio"),
+          hasHighMotion: c.reason.includes("motion") || c.reason.includes("Physical"),
+          hasSceneChange: c.reason.includes("change"),
+        },
       };
     });
+
+    // Try to call AI for better content generation
+    try {
+      const aiResponse = await fetch(`${supabaseUrl}/functions/v1/generate-viral-content`, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${supabaseServiceKey}`,
+        },
+        body: JSON.stringify({ clips: clipsWithMetadata }),
+      });
+      
+      if (aiResponse.ok) {
+        const aiResult = await aiResponse.json();
+        if (aiResult.success && aiResult.clips) {
+          clipsWithMetadata = aiResult.clips;
+          console.log("AI-enhanced viral content generated successfully");
+        }
+      }
+    } catch (error) {
+      console.log("AI enhancement skipped:", error);
+    }
 
     return new Response(
       JSON.stringify({
@@ -654,7 +684,10 @@ serve(async (req) => {
         clipsFound: clips.length,
         clips: clipsWithMetadata,
         jobsCreated: jobs.length,
-        message: `Found ${clips.length} potential viral clips. Top ${jobs.length} queued for processing.`,
+        processingAvailable: processingAvailable,
+        message: processingAvailable 
+          ? `Found ${clips.length} potential viral clips. Top ${jobs.length} queued for processing.`
+          : `Found ${clips.length} potential viral clips. Set up FFmpeg service to generate edited clips.`,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

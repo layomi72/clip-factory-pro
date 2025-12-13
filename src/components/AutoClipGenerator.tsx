@@ -26,7 +26,7 @@ interface AutoClipGeneratorProps {
 interface ProcessedClip {
   jobId: string;
   clipUrl: string | null;
-  status: "pending" | "processing" | "completed" | "failed";
+  status: "pending" | "processing" | "completed" | "failed" | "awaiting_service";
   startTime: number;
   endTime: number;
 }
@@ -201,6 +201,14 @@ export function AutoClipGenerator({ videoUrl, duration, importedStreamId }: Auto
           <p className="text-sm text-muted-foreground">
             Found {analysis.clipsFound} potential viral clips. Top {analysis.jobsCreated} queued for processing.
           </p>
+          {!analysis.processingAvailable && (
+            <div className="mt-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+              <p className="text-sm text-amber-600 dark:text-amber-400">
+                <strong>⚠️ FFmpeg Service Not Configured:</strong> Clips are identified but cannot be processed into edited videos. 
+                Deploy the FFmpeg service to Railway/Render to enable full clip generation with captions, zoom effects, and audio enhancement.
+              </p>
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
@@ -208,54 +216,95 @@ export function AutoClipGenerator({ videoUrl, duration, importedStreamId }: Auto
               const timeKey = `${clip.startTime}-${clip.endTime}`;
               const processedClip = jobsByTimeRange.get(timeKey);
               const isProcessing = processedClip?.status === "processing" || processedClip?.status === "pending";
+              const isAwaitingService = processedClip?.status === "awaiting_service";
               const isCompleted = processedClip?.status === "completed" && processedClip.clipUrl;
               const isFailed = processedClip?.status === "failed";
+              
+              // Generate preview URL for source video
+              const getPreviewUrl = () => {
+                if (videoUrl.includes("youtube.com") || videoUrl.includes("youtu.be")) {
+                  const videoId = videoUrl.match(/(?:v=|youtu\.be\/)([^&?]+)/)?.[1];
+                  return videoId ? `https://www.youtube.com/watch?v=${videoId}&t=${Math.floor(clip.startTime)}` : videoUrl;
+                }
+                if (videoUrl.includes("twitch.tv")) {
+                  return `${videoUrl}?t=${Math.floor(clip.startTime / 3600)}h${Math.floor((clip.startTime % 3600) / 60)}m${Math.floor(clip.startTime % 60)}s`;
+                }
+                return videoUrl;
+              };
               
               return (
                 <div
                   key={index}
-                  className="flex items-center justify-between p-4 rounded-lg border bg-secondary/30 hover:bg-secondary/50 transition-colors"
+                  className="flex items-start justify-between p-4 rounded-lg border bg-secondary/30 hover:bg-secondary/50 transition-colors"
                 >
                   <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <Badge className={cn("font-semibold", getScoreColor(clip.score))}>
-                      {clip.score}% Viral Score
-                    </Badge>
-                    <Badge variant="outline" className="capitalize">
-                      {clip.type}
-                    </Badge>
-                    <span className="text-sm text-muted-foreground">
-                      {formatTime(clip.startTime)} - {formatTime(clip.endTime)} ({formatTime(clip.duration)})
-                    </span>
-                    {isProcessing && (
-                      <Badge variant="outline" className="bg-blue-500/10 text-blue-600 dark:text-blue-400">
-                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                        Processing...
+                    <div className="flex items-center gap-3 mb-2 flex-wrap">
+                      <Badge className={cn("font-semibold", getScoreColor(clip.score))}>
+                        {clip.score}% Viral Score
                       </Badge>
+                      <Badge variant="outline" className="capitalize">
+                        {clip.type}
+                      </Badge>
+                      <span className="text-sm text-muted-foreground">
+                        {formatTime(clip.startTime)} - {formatTime(clip.endTime)} ({formatTime(clip.duration)})
+                      </span>
+                      {isProcessing && (
+                        <Badge variant="outline" className="bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                          Processing...
+                        </Badge>
+                      )}
+                      {isAwaitingService && (
+                        <Badge variant="outline" className="bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                          Awaiting Service
+                        </Badge>
+                      )}
+                      {isCompleted && (
+                        <Badge variant="outline" className="bg-green-500/10 text-green-600 dark:text-green-400">
+                          <CheckCircle2 className="h-3 w-3 mr-1" />
+                          Ready
+                        </Badge>
+                      )}
+                      {isFailed && (
+                        <Badge variant="outline" className="bg-red-500/10 text-red-600 dark:text-red-400">
+                          Failed
+                        </Badge>
+                      )}
+                    </div>
+                    {clip.title && (
+                      <p className="text-base font-bold text-foreground mb-1">{clip.title}</p>
                     )}
-                    {isCompleted && (
-                      <Badge variant="outline" className="bg-green-500/10 text-green-600 dark:text-green-400">
-                        <CheckCircle2 className="h-3 w-3 mr-1" />
-                        Ready
-                      </Badge>
+                    <p className="text-sm text-muted-foreground mb-2">{clip.reason}</p>
+                    {clip.hashtags && clip.hashtags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mb-2">
+                        {clip.hashtags.slice(0, 5).map((tag, i) => (
+                          <span key={i} className="text-xs text-primary bg-primary/10 px-2 py-0.5 rounded">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
                     )}
-                    {isFailed && (
-                      <Badge variant="outline" className="bg-red-500/10 text-red-600 dark:text-red-400">
-                        Failed
-                      </Badge>
+                    {clip.triggers && clip.triggers.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {clip.triggers.map((trigger, i) => (
+                          <span key={i} className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
+                            {trigger.replace(/_/g, " ")}
+                          </span>
+                        ))}
+                      </div>
                     )}
                   </div>
-                  {clip.title && (
-                    <p className="text-sm font-semibold text-foreground mb-1">{clip.title}</p>
-                  )}
-                  <p className="text-sm text-muted-foreground">{clip.reason}</p>
-                  {clip.hashtags && clip.hashtags.length > 0 && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {clip.hashtags.slice(0, 3).join(" ")}
-                    </p>
-                  )}
-                </div>
-                  <div className="flex items-center gap-2 ml-4">
+                  <div className="flex items-center gap-2 ml-4 flex-shrink-0">
+                    {/* Preview button - always available */}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => window.open(getPreviewUrl(), "_blank")}
+                      title="Preview in source"
+                    >
+                      <Play className="h-4 w-4" />
+                    </Button>
+                    
                     {isCompleted && processedClip.clipUrl ? (
                       <>
                         <Button
@@ -284,7 +333,7 @@ export function AutoClipGenerator({ videoUrl, duration, importedStreamId }: Auto
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                         Processing...
                       </Button>
-                    ) : (
+                    ) : analysis.processingAvailable ? (
                       <>
                         <Button
                           size="sm"
@@ -297,7 +346,7 @@ export function AutoClipGenerator({ videoUrl, duration, importedStreamId }: Auto
                           ) : (
                             <Sparkles className="h-4 w-4 mr-2" />
                           )}
-                          Process Now
+                          Process
                         </Button>
                         <Button
                           size="sm"
@@ -308,6 +357,15 @@ export function AutoClipGenerator({ videoUrl, duration, importedStreamId }: Auto
                           Schedule
                         </Button>
                       </>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleScheduleClip(clip)}
+                      >
+                        <Calendar className="h-4 w-4 mr-2" />
+                        Schedule
+                      </Button>
                     )}
                   </div>
                 </div>
@@ -315,7 +373,7 @@ export function AutoClipGenerator({ videoUrl, duration, importedStreamId }: Auto
             })}
           </div>
 
-          {analysis.jobsCreated > 0 && (
+          {analysis.jobsCreated > 0 && analysis.processingAvailable && (
             <div className="mt-4 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
               <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
                 <CheckCircle2 className="h-4 w-4" />

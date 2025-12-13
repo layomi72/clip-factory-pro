@@ -133,6 +133,14 @@ export interface ClipSuggestion {
   title?: string; // Clickbait title
   caption?: string; // Viral-optimized caption
   hashtags?: string[]; // Hashtags for social media
+  triggers?: string[]; // Viral triggers detected
+  features?: {
+    hasLoudAudio: boolean;
+    hasHighMotion: boolean;
+    hasSceneChange: boolean;
+  };
+  onScreenText?: string[]; // Text overlays for the clip
+  thumbnailPrompt?: string; // Prompt for generating thumbnail
 }
 
 export interface AnalyzeVideoResponse {
@@ -140,6 +148,7 @@ export interface AnalyzeVideoResponse {
   clipsFound: number;
   clips: ClipSuggestion[];
   jobsCreated: number;
+  processingAvailable: boolean; // Whether FFmpeg service is configured
   message: string;
 }
 
