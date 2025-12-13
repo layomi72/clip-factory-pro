@@ -145,21 +145,30 @@ export const analysisApi = {
   ): Promise<AnalyzeVideoResponse> {
     // Try advanced analysis first
     try {
-      return await invokeFunction<AnalyzeVideoResponse>("analyze-video-advanced", {
+      const result = await invokeFunction<AnalyzeVideoResponse>("analyze-video-advanced", {
         videoUrl,
         duration,
         userId,
         importedStreamId,
       });
+      console.log("Advanced analysis succeeded:", result);
+      return result;
     } catch (error) {
       // Fallback to basic analysis
       console.warn("Advanced analysis failed, using basic:", error);
-      return invokeFunction<AnalyzeVideoResponse>("analyze-video", {
-        videoUrl,
-        duration,
-        userId,
-        importedStreamId,
-      });
+      try {
+        const result = await invokeFunction<AnalyzeVideoResponse>("analyze-video", {
+          videoUrl,
+          duration,
+          userId,
+          importedStreamId,
+        });
+        console.log("Basic analysis succeeded:", result);
+        return result;
+      } catch (fallbackError) {
+        console.error("Both analysis methods failed:", fallbackError);
+        throw fallbackError;
+      }
     }
   },
 };

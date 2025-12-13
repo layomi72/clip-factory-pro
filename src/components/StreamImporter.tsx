@@ -115,6 +115,13 @@ export function StreamImporter() {
       // Auto-generate viral clips if enabled
       if (autoGenerateClips && result.metadata?.duration) {
         try {
+          console.log("Starting auto-clip generation...", {
+            videoUrl,
+            duration: result.metadata.duration,
+            userId: user.id,
+            streamId: streamData.id
+          });
+          
           const analysisResult = await analysisApi.analyzeVideo(
             videoUrl,
             result.metadata.duration,
@@ -122,10 +129,17 @@ export function StreamImporter() {
             streamData.id
           );
           
+          console.log("Analysis result:", analysisResult);
+          
           return { ...streamData, clipsGenerated: analysisResult.clipsFound, jobsCreated: analysisResult.jobsCreated };
         } catch (analysisError) {
           console.error("Auto-clip generation failed:", analysisError);
-          // Continue even if analysis fails
+          // Continue even if analysis fails, but log the error
+          toast({
+            title: "Clip generation failed",
+            description: analysisError instanceof Error ? analysisError.message : "Could not generate clips automatically",
+            variant: "destructive",
+          });
         }
       }
 
