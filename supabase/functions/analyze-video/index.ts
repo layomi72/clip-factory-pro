@@ -593,13 +593,16 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Create processing jobs for top clips
-    const jobs = [];
+    // Create processing jobs and process top clips
+    const jobs: Array<{ jobId: string; clip: ClipSuggestion }> = [];
+    const processedClips: Array<{ jobId: string; clip: ClipSuggestion; clipUrl?: string; status: string; error?: string }> = [];
     const topClips = clips.slice(0, 5); // Top 5 clips
-    console.log(`Creating processing jobs for ${topClips.length} clips`);
+    console.log(`Creating and processing ${topClips.length} clips`);
     
     for (const clip of topClips) {
-      console.log(`Creating job for clip: ${clip.startTime}s - ${clip.endTime}s (score: ${clip.score})`);
+      console.log(`Processing clip: ${clip.startTime}s - ${clip.endTime}s (score: ${clip.score})`);
+      
+      // Create job first
       const { data: job, error } = await supabase
         .from("processing_jobs")
         .insert({
@@ -607,7 +610,7 @@ serve(async (req) => {
           source_video_url: videoUrl,
           clip_start_time: clip.startTime,
           clip_end_time: clip.endTime,
-          status: processingAvailable ? "pending" : "awaiting_service",
+          status: processingAvailable ? "processing" : "awaiting_service",
           stream_id: importedStreamId || null,
         })
         .select()
@@ -615,16 +618,107 @@ serve(async (req) => {
 
       if (error) {
         console.error(`Error creating job for clip ${clip.startTime}-${clip.endTime}:`, error);
-      } else if (job) {
-        console.log(`Job created: ${job.id}`);
-        jobs.push({
+        continue;
+      }
+      
+      console.log(`Job created: ${job.id}`);
+      
+      // If FFmpeg service is available, process the clip immediately
+      if (processingAvailable && ffmpegServiceUrl) {
+        try {
+          console.log(`Calling FFmpeg service for clip ${job.id}...`);
+          const processResponse = await fetch(`${ffmpegServiceUrl}/process`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sourceUrl: videoUrl,
+              startTime: clip.startTime,
+              endTime: clip.endTime,
+              userId: userId,
+              clipId: job.id,
+              options: {
+                addCaptions: true,
+                captionText: generateClickbaitTitle(clip.type, clip.score),
+                enhanceAudio: true,
+                videoQuality: "high",
+              },
+            }),
+          });
+          
+          if (processResponse.ok) {
+            const processResult = await processResponse.json();
+            console.log(`Clip processed successfully: ${processResult.clipUrl}`);
+            
+            // Update job with output URL
+            await supabase
+              .from("processing_jobs")
+              .update({
+                status: "completed",
+                output_url: processResult.clipUrl,
+                completed_at: new Date().toISOString(),
+              })
+              .eq("id", job.id);
+            
+            processedClips.push({
+              jobId: job.id,
+              clip,
+              clipUrl: processResult.clipUrl,
+              status: "completed",
+            });
+          } else {
+            const errorText = await processResponse.text();
+            console.error(`FFmpeg processing failed: ${errorText}`);
+            
+            await supabase
+              .from("processing_jobs")
+              .update({
+                status: "failed",
+                error_message: `Processing failed: ${errorText}`,
+              })
+              .eq("id", job.id);
+            
+            processedClips.push({
+              jobId: job.id,
+              clip,
+              status: "failed",
+              error: errorText,
+            });
+          }
+        } catch (processError) {
+          console.error(`Error calling FFmpeg service:`, processError);
+          
+          await supabase
+            .from("processing_jobs")
+            .update({
+              status: "failed",
+              error_message: processError instanceof Error ? processError.message : "Unknown error",
+            })
+            .eq("id", job.id);
+          
+          processedClips.push({
+            jobId: job.id,
+            clip,
+            status: "failed",
+            error: processError instanceof Error ? processError.message : "Unknown error",
+          });
+        }
+      } else {
+        // No FFmpeg service, just queue the job
+        processedClips.push({
           jobId: job.id,
           clip,
+          status: "awaiting_service",
         });
       }
+      
+      jobs.push({
+        jobId: job.id,
+        clip,
+      });
     }
     
-    console.log(`Successfully created ${jobs.length} processing jobs`);
+    const completedCount = processedClips.filter(c => c.status === "completed").length;
+    console.log(`Processed ${completedCount}/${jobs.length} clips successfully`);
 
     // Try to enhance clips with AI-generated viral content
     let clipsWithMetadata = clips.map(c => {
@@ -678,15 +772,29 @@ serve(async (req) => {
       console.log("AI enhancement skipped:", error);
     }
 
+    // Add processed clip URLs to the response
+    const clipsWithUrls = clipsWithMetadata.map((c, i) => {
+      const processed = processedClips.find(p => 
+        p.clip.startTime === c.startTime && p.clip.endTime === c.endTime
+      );
+      return {
+        ...c,
+        jobId: processed?.jobId,
+        clipUrl: processed?.clipUrl || null,
+        processingStatus: processed?.status || "not_processed",
+      };
+    });
+
     return new Response(
       JSON.stringify({
         success: true,
         clipsFound: clips.length,
-        clips: clipsWithMetadata,
+        clips: clipsWithUrls,
         jobsCreated: jobs.length,
+        clipsProcessed: completedCount,
         processingAvailable: processingAvailable,
         message: processingAvailable 
-          ? `Found ${clips.length} potential viral clips. Top ${jobs.length} queued for processing.`
+          ? `Found ${clips.length} clips. Processed ${completedCount}/${jobs.length} into downloadable videos.`
           : `Found ${clips.length} potential viral clips. Set up FFmpeg service to generate edited clips.`,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

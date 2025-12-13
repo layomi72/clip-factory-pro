@@ -199,7 +199,10 @@ export function AutoClipGenerator({ videoUrl, duration, importedStreamId }: Auto
             AI-Generated Viral Clips
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            Found {analysis.clipsFound} potential viral clips. Top {analysis.jobsCreated} queued for processing.
+            Found {analysis.clipsFound} potential viral clips. 
+            {analysis.clipsProcessed !== undefined && analysis.clipsProcessed > 0 
+              ? ` ${analysis.clipsProcessed} clips processed and ready to download.`
+              : ` Top ${analysis.jobsCreated} queued for processing.`}
           </p>
           {!analysis.processingAvailable && (
             <div className="mt-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
@@ -215,10 +218,15 @@ export function AutoClipGenerator({ videoUrl, duration, importedStreamId }: Auto
             {analysis.clips.map((clip, index) => {
               const timeKey = `${clip.startTime}-${clip.endTime}`;
               const processedClip = jobsByTimeRange.get(timeKey);
-              const isProcessing = processedClip?.status === "processing" || processedClip?.status === "pending";
-              const isAwaitingService = processedClip?.status === "awaiting_service";
-              const isCompleted = processedClip?.status === "completed" && processedClip.clipUrl;
-              const isFailed = processedClip?.status === "failed";
+              
+              // Check clip status from either the response or the jobs query
+              const clipStatus = clip.processingStatus || processedClip?.status;
+              const clipUrl = clip.clipUrl || processedClip?.clipUrl;
+              
+              const isProcessing = clipStatus === "processing" || clipStatus === "pending";
+              const isAwaitingService = clipStatus === "awaiting_service";
+              const isCompleted = clipStatus === "completed" && clipUrl;
+              const isFailed = clipStatus === "failed";
               
               // Generate preview URL for source video
               const getPreviewUrl = () => {
@@ -305,12 +313,12 @@ export function AutoClipGenerator({ videoUrl, duration, importedStreamId }: Auto
                       <Play className="h-4 w-4" />
                     </Button>
                     
-                    {isCompleted && processedClip.clipUrl ? (
+                    {isCompleted && clipUrl ? (
                       <>
                         <Button
                           size="sm"
                           variant="default"
-                          onClick={() => handleDownloadClip(processedClip.clipUrl!, clip)}
+                          onClick={() => handleDownloadClip(clipUrl!, clip)}
                         >
                           <Download className="h-4 w-4 mr-2" />
                           Download
@@ -373,13 +381,24 @@ export function AutoClipGenerator({ videoUrl, duration, importedStreamId }: Auto
             })}
           </div>
 
-          {analysis.jobsCreated > 0 && analysis.processingAvailable && (
+          {analysis.clipsProcessed !== undefined && analysis.clipsProcessed > 0 && (
             <div className="mt-4 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
               <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
                 <CheckCircle2 className="h-4 w-4" />
                 <span>
-                  {analysis.jobsCreated} top clips automatically queued for processing. 
-                  They'll be ready to post once processing completes.
+                  {analysis.clipsProcessed} clips processed and ready to download! 
+                  Click the Download button to save them.
+                </span>
+              </div>
+            </div>
+          )}
+          
+          {analysis.jobsCreated > 0 && analysis.processingAvailable && (!analysis.clipsProcessed || analysis.clipsProcessed === 0) && (
+            <div className="mt-4 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+              <div className="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>
+                  Processing clips... Refresh the page to check status.
                 </span>
               </div>
             </div>

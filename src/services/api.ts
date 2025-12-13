@@ -141,6 +141,9 @@ export interface ClipSuggestion {
   };
   onScreenText?: string[]; // Text overlays for the clip
   thumbnailPrompt?: string; // Prompt for generating thumbnail
+  jobId?: string; // Processing job ID
+  clipUrl?: string | null; // Processed clip URL (if available)
+  processingStatus?: string; // Current processing status
 }
 
 export interface AnalyzeVideoResponse {
@@ -148,6 +151,7 @@ export interface AnalyzeVideoResponse {
   clipsFound: number;
   clips: ClipSuggestion[];
   jobsCreated: number;
+  clipsProcessed?: number; // Number of clips successfully processed
   processingAvailable: boolean; // Whether FFmpeg service is configured
   message: string;
 }
