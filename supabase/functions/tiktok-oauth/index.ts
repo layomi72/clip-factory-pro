@@ -38,8 +38,12 @@ serve(async (req) => {
       'video.upload'
     ].join(',');
 
-    // State contains user ID for linking after callback
-    const state = btoa(JSON.stringify({ userId, timestamp: Date.now() }));
+    // State contains user ID and frontend URL for redirect after callback
+    const state = btoa(JSON.stringify({ 
+      userId, 
+      timestamp: Date.now(),
+      frontendUrl: redirectUri || null 
+    }));
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const callbackUrl = `${supabaseUrl}/functions/v1/tiktok-oauth-callback`;
