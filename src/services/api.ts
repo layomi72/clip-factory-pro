@@ -147,12 +147,19 @@ export const analysisApi = {
     console.log("Calling analyze-video function:", { videoUrl, duration, userId, importedStreamId });
     
     try {
-      const result = await invokeFunction<AnalyzeVideoResponse>("analyze-video", {
+      // Add timeout to prevent hanging (30 seconds max)
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("Analysis timeout - took longer than 30 seconds")), 30000);
+      });
+      
+      const analysisPromise = invokeFunction<AnalyzeVideoResponse>("analyze-video", {
         videoUrl,
         duration,
         userId,
         importedStreamId,
       });
+      
+      const result = await Promise.race([analysisPromise, timeoutPromise]);
       console.log("Analysis succeeded:", result);
       return result;
     } catch (error) {
