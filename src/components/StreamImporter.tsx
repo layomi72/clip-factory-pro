@@ -113,33 +113,51 @@ export function StreamImporter() {
       const streamData = insertedData as any;
 
       // Auto-generate viral clips if enabled
-      if (autoGenerateClips && result.metadata?.duration) {
-        try {
-          console.log("Starting auto-clip generation...", {
-            videoUrl,
-            duration: result.metadata.duration,
-            userId: user.id,
-            streamId: streamData.id
-          });
-          
-          const analysisResult = await analysisApi.analyzeVideo(
-            videoUrl,
-            result.metadata.duration,
-            user.id,
-            streamData.id
-          );
-          
-          console.log("Analysis result:", analysisResult);
-          
-          return { ...streamData, clipsGenerated: analysisResult.clipsFound, jobsCreated: analysisResult.jobsCreated };
-        } catch (analysisError) {
-          console.error("Auto-clip generation failed:", analysisError);
-          // Continue even if analysis fails, but log the error
+      if (autoGenerateClips) {
+        const duration = result.metadata?.duration || 0;
+        
+        if (!duration || duration <= 0) {
+          console.warn("Cannot generate clips: invalid duration", duration);
           toast({
-            title: "Clip generation failed",
-            description: analysisError instanceof Error ? analysisError.message : "Could not generate clips automatically",
-            variant: "destructive",
+            title: "Clip generation skipped",
+            description: "Video duration not available. Clips can be created manually in Clip Editor.",
+            variant: "default",
           });
+        } else {
+          try {
+            console.log("Starting auto-clip generation...", {
+              videoUrl,
+              duration,
+              userId: user.id,
+              streamId: streamData.id
+            });
+            
+            const analysisResult = await analysisApi.analyzeVideo(
+              videoUrl,
+              duration,
+              user.id,
+              streamData.id
+            );
+            
+            console.log("Analysis result:", analysisResult);
+            
+            if (analysisResult.clipsFound > 0) {
+              return { 
+                ...streamData, 
+                clipsGenerated: analysisResult.clipsFound, 
+                jobsCreated: analysisResult.jobsCreated 
+              };
+            } else {
+              console.warn("Analysis returned 0 clips");
+            }
+          } catch (analysisError) {
+            console.error("Auto-clip generation failed:", analysisError);
+            toast({
+              title: "Clip generation failed",
+              description: analysisError instanceof Error ? analysisError.message : "Could not generate clips automatically",
+              variant: "destructive",
+            });
+          }
         }
       }
 
