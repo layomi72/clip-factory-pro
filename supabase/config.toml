@@ -1,5 +1,11 @@
 project_id = "jpndzcsqfuumdrcyjfxl"
 
+[functions.generate-viral-content]
+verify_jwt = false
+
+[functions.generate-thumbnail]
+verify_jwt = false
+
 [functions.process-scheduled-posts]
 verify_jwt = false
 
