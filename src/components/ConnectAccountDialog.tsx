@@ -89,12 +89,15 @@ export function ConnectAccountDialog({ open, onOpenChange, platform }: ConnectAc
     try {
       let authUrl: string;
 
+      // Pass the current frontend URL so callback knows where to redirect
+      const frontendUrl = window.location.origin;
+      
       if (platform === "tiktok") {
-        authUrl = await oauthApi.getTikTokAuthUrl(user.id);
+        authUrl = await oauthApi.getTikTokAuthUrl(user.id, frontendUrl);
       } else if (platform === "youtube") {
-        authUrl = await oauthApi.getYouTubeAuthUrl(user.id);
+        authUrl = await oauthApi.getYouTubeAuthUrl(user.id, frontendUrl);
       } else if (platform === "instagram") {
-        authUrl = await oauthApi.getInstagramAuthUrl(user.id);
+        authUrl = await oauthApi.getInstagramAuthUrl(user.id, frontendUrl);
       } else {
         toast.error("OAuth not supported for this platform");
         return;

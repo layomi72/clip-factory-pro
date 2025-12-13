@@ -25,22 +25,27 @@ serve(async (req) => {
       return Response.redirect(`${frontendUrl}/?error=missing_parameters`);
     }
 
-    // Decode state to get user ID
+    // Decode state to get user ID and frontend URL
     let userId: string;
+    let customFrontendUrl: string | null = null;
     try {
       const stateData = JSON.parse(atob(state));
       userId = stateData.userId;
+      customFrontendUrl = stateData.frontendUrl || null;
     } catch (e) {
       console.error('Invalid state parameter:', e);
       return Response.redirect(`${frontendUrl}/?error=invalid_state`);
     }
+    
+    // Use custom frontend URL if provided (from the state), otherwise use derived URL
+    const redirectFrontendUrl = customFrontendUrl || frontendUrl;
 
     const clientKey = Deno.env.get('TIKTOK_CLIENT_KEY')?.trim();
     const clientSecret = Deno.env.get('TIKTOK_CLIENT_SECRET')?.trim();
 
     if (!clientKey || !clientSecret) {
       console.error('Missing TikTok credentials');
-      return Response.redirect(`${frontendUrl}/?error=server_configuration_error`);
+      return Response.redirect(`${redirectFrontendUrl}/?error=server_configuration_error`);
     }
     
     // Log for debugging (first few chars only for security)
@@ -49,6 +54,7 @@ serve(async (req) => {
     console.log('Client Secret (first 8 chars):', clientSecret.substring(0, 8) + '...');
     console.log('Client Key length:', clientKey.length);
     console.log('Client Secret length:', clientSecret.length);
+    console.log('Redirect Frontend URL:', redirectFrontendUrl);
 
     const callbackUrl = `${supabaseUrl}/functions/v1/tiktok-oauth-callback`;
 
@@ -77,7 +83,7 @@ serve(async (req) => {
 
     if (tokenData.error || !tokenData.access_token) {
       console.error('Token exchange failed:', tokenData);
-      return Response.redirect(`${frontendUrl}/?error=${encodeURIComponent(tokenData.error_description || 'token_exchange_failed')}`);
+      return Response.redirect(`${redirectFrontendUrl}/?error=${encodeURIComponent(tokenData.error_description || 'token_exchange_failed')}`);
     }
 
     const { access_token, refresh_token, expires_in, open_id } = tokenData;
@@ -129,7 +135,7 @@ serve(async (req) => {
 
       if (updateError) {
         console.error('Error updating account:', updateError);
-        return Response.redirect(`${frontendUrl}/?error=database_error`);
+        return Response.redirect(`${redirectFrontendUrl}/?error=database_error`);
       }
 
       console.log('Updated existing TikTok account for user:', userId);
@@ -150,14 +156,14 @@ serve(async (req) => {
 
       if (insertError) {
         console.error('Error inserting account:', insertError);
-        return Response.redirect(`${frontendUrl}/?error=database_error`);
+        return Response.redirect(`${redirectFrontendUrl}/?error=database_error`);
       }
 
       console.log('Created new TikTok account for user:', userId);
     }
 
     // Redirect back to frontend with success
-    return Response.redirect(`${frontendUrl}/?tiktok_connected=true`);
+    return Response.redirect(`${redirectFrontendUrl}/?tiktok_connected=true`);
 
   } catch (error) {
     console.error('TikTok OAuth callback error:', error);
