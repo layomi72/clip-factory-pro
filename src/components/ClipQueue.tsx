@@ -1,9 +1,12 @@
-import { Clock, CheckCircle2, Loader2, Play, AlertCircle } from "lucide-react";
+import { Clock, CheckCircle2, Loader2, Play, AlertCircle, ExternalLink, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatDistanceToNow } from "date-fns";
+import { Button } from "@/components/ui/button";
+import { useState } from "react";
+import { SchedulePostDialog } from "./SchedulePostDialog";
 
 interface ProcessingJob {
   id: string;
@@ -54,8 +57,36 @@ const formatDuration = (seconds: number) => {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 };
 
+const getPreviewUrl = (sourceUrl: string, startTime: number): string | null => {
+  try {
+    const url = new URL(sourceUrl);
+    
+    // YouTube
+    if (url.hostname.includes("youtube.com") || url.hostname.includes("youtu.be")) {
+      const videoId = url.searchParams.get("v") || url.pathname.split("/").pop();
+      return `https://www.youtube.com/watch?v=${videoId}&t=${Math.floor(startTime)}s`;
+    }
+    
+    // Twitch
+    if (url.hostname.includes("twitch.tv")) {
+      return `${sourceUrl}?t=${Math.floor(startTime)}s`;
+    }
+    
+    // TikTok - no timestamp support
+    if (url.hostname.includes("tiktok.com")) {
+      return sourceUrl;
+    }
+    
+    return sourceUrl;
+  } catch {
+    return null;
+  }
+};
+
 export function ClipQueue() {
   const { user } = useAuth();
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
+  const [selectedJob, setSelectedJob] = useState<ProcessingJob | null>(null);
 
   const { data: jobs = [], isLoading } = useQuery({
     queryKey: ["processing-jobs", user?.id],
@@ -73,7 +104,7 @@ export function ClipQueue() {
       return (data || []) as ProcessingJob[];
     },
     enabled: !!user,
-    refetchInterval: 5000, // Refetch every 5 seconds to get status updates
+    refetchInterval: 5000,
   });
 
   const formatClipDuration = (job: ProcessingJob) => {
@@ -81,88 +112,132 @@ export function ClipQueue() {
     return formatDuration(duration);
   };
 
+  const handlePreview = (job: ProcessingJob) => {
+    const previewUrl = getPreviewUrl(job.source_video_url, job.clip_start_time);
+    if (previewUrl) {
+      window.open(previewUrl, "_blank");
+    }
+  };
+
+  const handleSchedule = (job: ProcessingJob) => {
+    setSelectedJob(job);
+    setScheduleDialogOpen(true);
+  };
+
   return (
-    <div className="rounded-xl bg-card border border-border p-6 animate-slide-up">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10">
-            <Clock className="h-5 w-5 text-accent" />
+    <>
+      <div className="rounded-xl bg-card border border-border p-6 animate-slide-up">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10">
+              <Clock className="h-5 w-5 text-accent" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">Clip Queue</h2>
+              <p className="text-sm text-muted-foreground">
+                {isLoading ? "Loading..." : `${jobs.length} clips in queue`}
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-lg font-semibold text-foreground">Clip Queue</h2>
-            <p className="text-sm text-muted-foreground">
-              {isLoading ? "Loading..." : `${jobs.length} clips in queue`}
+        </div>
+
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : jobs.length === 0 ? (
+          <div className="text-center py-8">
+            <Clock className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-medium mb-2">No clips in queue</h3>
+            <p className="text-muted-foreground text-sm">
+              Process clips from imported streams to see them here
             </p>
           </div>
-        </div>
+        ) : (
+          <div className="space-y-3">
+            {jobs.map((job) => {
+              const status = statusConfig[job.status];
+              const StatusIcon = status.icon;
+
+              return (
+                <div
+                  key={job.id}
+                  className="group flex items-center gap-4 rounded-lg bg-secondary/30 p-3 transition-all hover:bg-secondary/50"
+                >
+                  <button
+                    onClick={() => handlePreview(job)}
+                    className="relative h-16 w-28 flex-shrink-0 overflow-hidden rounded-lg bg-muted flex items-center justify-center cursor-pointer hover:bg-muted/80 transition-colors"
+                    title="Preview clip in new tab"
+                  >
+                    <Play className="h-6 w-6 text-muted-foreground group-hover:text-primary transition-colors" />
+                    <div className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 text-xs font-medium text-white">
+                      {formatClipDuration(job)}
+                    </div>
+                  </button>
+
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-medium text-foreground truncate text-sm">
+                      Clip from {new URL(job.source_video_url).hostname}
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {formatDuration(job.clip_start_time)} - {formatDuration(job.clip_end_time)}
+                    </p>
+                    <div className="mt-1 flex items-center gap-2 flex-wrap">
+                      <span
+                        className={cn(
+                          "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
+                          status.bg,
+                          status.color
+                        )}
+                      >
+                        <StatusIcon className={cn("h-3 w-3", status.animate)} />
+                        {status.label}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {formatDistanceToNow(new Date(job.created_at), { addSuffix: true })}
+                      </span>
+                      {job.error_message && (
+                        <span className="text-xs text-red-400 truncate max-w-[200px]">
+                          {job.error_message}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handlePreview(job)}
+                      title="Preview on source platform"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleSchedule(job)}
+                    >
+                      <Calendar className="h-4 w-4 mr-1" />
+                      Schedule
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {isLoading ? (
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
-      ) : jobs.length === 0 ? (
-        <div className="text-center py-8">
-          <Clock className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-lg font-medium mb-2">No clips in queue</h3>
-          <p className="text-muted-foreground text-sm">
-            Process clips from imported streams to see them here
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {jobs.map((job) => {
-            const status = statusConfig[job.status];
-            const StatusIcon = status.icon;
-
-            return (
-              <div
-                key={job.id}
-                className="group flex items-center gap-4 rounded-lg bg-secondary/30 p-3 transition-all hover:bg-secondary/50"
-              >
-                <div className="relative h-16 w-28 flex-shrink-0 overflow-hidden rounded-lg bg-muted flex items-center justify-center">
-                  <Play className="h-6 w-6 text-muted-foreground" />
-                  <div className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 text-xs font-medium text-white">
-                    {formatClipDuration(job)}
-                  </div>
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-medium text-foreground truncate text-sm">
-                    Clip from {new URL(job.source_video_url).hostname}
-                  </h3>
-                  <div className="mt-1 flex items-center gap-2 flex-wrap">
-                    <span
-                      className={cn(
-                        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
-                        status.bg,
-                        status.color
-                      )}
-                    >
-                      <StatusIcon className={cn("h-3 w-3", status.animate)} />
-                      {status.label}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {formatDistanceToNow(new Date(job.created_at), { addSuffix: true })}
-                    </span>
-                    {job.error_message && (
-                      <span className="text-xs text-red-400 truncate max-w-[200px]">
-                        {job.error_message}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {job.status === "completed" && job.output_url && (
-                  <button className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground opacity-0 transition-opacity group-hover:opacity-100">
-                    Use Clip
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </div>
+      {selectedJob && (
+        <SchedulePostDialog
+          open={scheduleDialogOpen}
+          onOpenChange={setScheduleDialogOpen}
+          defaultClipUrl={selectedJob.output_url || selectedJob.source_video_url}
+          defaultStartTime={selectedJob.clip_start_time}
+          defaultEndTime={selectedJob.clip_end_time}
+        />
       )}
-    </div>
+    </>
   );
 }
