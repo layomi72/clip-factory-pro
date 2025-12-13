@@ -12,11 +12,15 @@ serve(async (req) => {
   }
 
   try {
-    const clientKey = Deno.env.get('TIKTOK_CLIENT_KEY');
+    const clientKey = Deno.env.get('TIKTOK_CLIENT_KEY')?.trim();
     
     if (!clientKey) {
+      console.error('TIKTOK_CLIENT_KEY is missing or empty');
       throw new Error('TIKTOK_CLIENT_KEY is not configured');
     }
+    
+    // Log first few characters for debugging (don't log full key for security)
+    console.log('TikTok Client Key configured:', clientKey.substring(0, 4) + '...');
 
     const { userId, redirectUri } = await req.json();
 
@@ -51,6 +55,8 @@ serve(async (req) => {
     const authUrl = `${baseUrl}?${params.toString()}`;
 
     console.log('Generated TikTok OAuth URL for user:', userId);
+    console.log('Redirect URI:', callbackUrl);
+    console.log('Scopes:', scopes);
 
     return new Response(
       JSON.stringify({ authUrl }),
