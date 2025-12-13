@@ -212,9 +212,13 @@ serve(async (req) => {
     }
 
     console.log(`Analyzing video for viral clips: ${videoUrl}`);
+    console.log(`Video duration: ${duration} seconds`);
+    console.log(`User ID: ${userId}`);
+    console.log(`Imported Stream ID: ${importedStreamId || 'none'}`);
 
     // Analyze video for clips
     const clips = await analyzeVideoForClips(videoUrl, duration);
+    console.log(`Found ${clips.length} potential clips`);
 
     // Save clip suggestions to database
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -223,7 +227,11 @@ serve(async (req) => {
 
     // Create processing jobs for top clips
     const jobs = [];
-    for (const clip of clips.slice(0, 5)) { // Top 5 clips
+    const topClips = clips.slice(0, 5); // Top 5 clips
+    console.log(`Creating processing jobs for ${topClips.length} clips`);
+    
+    for (const clip of topClips) {
+      console.log(`Creating job for clip: ${clip.startTime}s - ${clip.endTime}s (score: ${clip.score})`);
       const { data: job, error } = await supabase
         .from("processing_jobs")
         .insert({
@@ -238,13 +246,18 @@ serve(async (req) => {
         .select()
         .single();
 
-      if (!error && job) {
+      if (error) {
+        console.error(`Error creating job for clip ${clip.startTime}-${clip.endTime}:`, error);
+      } else if (job) {
+        console.log(`Job created: ${job.id}`);
         jobs.push({
           jobId: job.id,
           clip,
         });
       }
     }
+    
+    console.log(`Successfully created ${jobs.length} processing jobs`);
 
     return new Response(
       JSON.stringify({
